@@ -72,7 +72,7 @@ start_services() {
     docker-compose ps
 
     print_info "✅ 服务启动成功！"
-    print_info "应用地址: http://localhost:3000"
+    print_info "应用地址: http://localhost:3005"
     print_info "查看日志: ./deploy.sh logs"
 }
 

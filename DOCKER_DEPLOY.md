@@ -74,7 +74,7 @@ docker-compose logs -f postgres
 ### 5. 访问应用
 
 打开浏览器访问：
-- 应用地址：http://localhost:3000
+- 应用地址：http://localhost:3005
 - 如果修改了端口，使用配置的端口
 
 ### 6. 创建管理员账户
@@ -199,7 +199,7 @@ server {
     server_name your-domain.com;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:3005;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -260,7 +260,7 @@ docker-compose exec postgres pg_isready -U fsd_user
 ### 端口占用
 ```bash
 # 查看端口占用
-lsof -i :3000
+lsof -i :3005
 lsof -i :5432
 
 # 修改docker-compose.yml中的端口映射

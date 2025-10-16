@@ -166,7 +166,7 @@ docker-compose up -d --build
 ./deploy.sh backup    # 备份数据库
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:3005
 
 ---
 
@@ -202,7 +202,7 @@ npx tsx scripts/create-admin.ts
 pnpm dev
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:3005
 
 ## 订单流程图
 
