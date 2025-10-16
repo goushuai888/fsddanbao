@@ -30,6 +30,7 @@ model User {
   disputes      Dispute[]
   givenReviews  Review[]  @relation("Reviewer")
   receivedReviews Review[] @relation("Reviewee")
+  withdrawals   Withdrawal[]
 }
 
 enum Role {
@@ -194,4 +195,51 @@ model Review {
   createdAt       DateTime  @default(now())
 
   @@unique([orderId, reviewerId])
+}
+
+// 提现申请表
+model Withdrawal {
+  id              String            @id @default(cuid())
+
+  // 关联
+  userId          String
+  user            User              @relation(fields: [userId], references: [id])
+
+  // 提现信息
+  amount          Float             // 提现金额
+  fee             Float             @default(0) // 提现手续费
+  actualAmount    Float             // 实际到账金额
+
+  // 收款信息
+  bankName        String?           // 银行名称
+  bankAccount     String?           // 银行账号
+  accountName     String?           // 账户名称
+  alipayAccount   String?           // 支付宝账号
+  wechatAccount   String?           // 微信账号
+  withdrawMethod  String            // 提现方式(bank/alipay/wechat)
+
+  // 状态
+  status          WithdrawalStatus  @default(PENDING)
+
+  // 审核信息
+  reviewedBy      String?           // 审核人
+  reviewNote      String?           // 审核备注
+  rejectReason    String?           // 拒绝原因
+  reviewedAt      DateTime?         // 审核时间
+
+  // 支付信息
+  transactionId   String?           // 交易ID
+  completedAt     DateTime?         // 完成时间
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+enum WithdrawalStatus {
+  PENDING       // 待审核
+  APPROVED      // 已批准
+  REJECTED      // 已拒绝
+  PROCESSING    // 处理中
+  COMPLETED     // 已完成
+  FAILED        // 失败
 }

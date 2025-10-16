@@ -246,9 +246,16 @@ export default function ProfilePage() {
                 {user?.verified ? '已认证' : '未认证'}
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <span className="text-gray-600">账户余额:</span>
-              <span className="font-medium">¥ {user?.balance.toFixed(2)}</span>
+              <div className="flex items-center gap-3">
+                <span className="font-medium text-lg">¥ {user?.balance.toFixed(2)}</span>
+                <Link href="/withdrawals">
+                  <Button size="sm" variant="outline">
+                    提现
+                  </Button>
+                </Link>
+              </div>
             </div>
           </CardContent>
         </Card>
