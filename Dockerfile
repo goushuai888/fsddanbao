@@ -35,12 +35,18 @@ RUN pnpm build
 FROM base AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# 安装 OpenSSL 和 Prisma 运行时依赖
+RUN apk add --no-cache openssl openssl-dev
 
 # 创建非 root 用户
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
+
+# 安装 pnpm (用于 prisma generate)
+RUN npm install -g pnpm
 
 # 复制必要文件
 COPY --from=builder /app/public ./public
@@ -51,16 +57,17 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# 复制 node_modules (包含 Prisma Client)
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# 在 runner 阶段生成 Prisma Client
+RUN pnpm install @prisma/client prisma && \
+    pnpm prisma generate && \
+    chown -R nextjs:nodejs /app
 
 USER nextjs
 
 EXPOSE 3000
 
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
 # 启动应用
 CMD ["node", "server.js"]
