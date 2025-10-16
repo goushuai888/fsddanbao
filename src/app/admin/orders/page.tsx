@@ -20,6 +20,11 @@ interface Order {
   vehicleVin: string | null
   fsdVersion: string | null
   description: string | null
+  // 退款申请
+  refundRequested: boolean
+  refundReason: string | null
+  refundRequestedAt: string | null
+  refundStatus: string | null
   createdAt: string
   publishedAt: string | null
   paidAt: string | null

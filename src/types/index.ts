@@ -29,6 +29,11 @@ export interface Order {
   platformFee: number | null
   transferProof: string | null
   transferNote: string | null
+  // 退款申请
+  refundRequested: boolean
+  refundReason: string | null
+  refundRequestedAt: Date | null
+  refundStatus: RefundStatus | null
   createdAt: Date
   updatedAt: Date
   paidAt: Date | null
@@ -45,6 +50,12 @@ export type OrderStatus =
   | 'COMPLETED'
   | 'CANCELLED'
   | 'DISPUTE'
+
+export type RefundStatus =
+  | 'PENDING'    // 待处理
+  | 'APPROVED'   // 已同意
+  | 'REJECTED'   // 已拒绝
+  | 'COMPLETED'  // 已完成
 
 // API响应类型
 export interface ApiResponse<T = any> {

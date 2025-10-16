@@ -26,6 +26,7 @@ interface Order {
   paidAt: string | null
   transferredAt: string | null
   completedAt: string | null
+  cancelledAt: string | null
   refundRequested: boolean
   refundReason: string | null
   refundRequestedAt: string | null
