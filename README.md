@@ -131,6 +131,47 @@ model Order {
 }
 ```
 
+## 部署方式
+
+### 方式一：Docker部署（推荐）🐳
+
+**优点：**
+- 一键部署，无需配置环境
+- 自动包含PostgreSQL数据库
+- 生产环境就绪
+- 易于维护和更新
+
+**快速开始：**
+
+```bash
+# 1. 配置环境变量
+cp .env.production.example .env.production
+# 编辑 .env.production，修改数据库密码和密钥
+
+# 2. 一键启动（使用便捷脚本）
+./deploy.sh start
+
+# 或使用docker-compose
+docker-compose up -d --build
+```
+
+**详细文档：** 查看 [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md)
+
+**常用命令：**
+```bash
+./deploy.sh start     # 启动服务
+./deploy.sh stop      # 停止服务
+./deploy.sh logs      # 查看日志
+./deploy.sh status    # 查看状态
+./deploy.sh backup    # 备份数据库
+```
+
+访问 http://localhost:3000
+
+---
+
+### 方式二：本地开发部署
+
 ## 环境配置
 
 1. 复制环境变量模板：
