@@ -48,7 +48,12 @@ export async function GET(
           }
         },
         payments: true,
-        reviews: true
+        reviews: true,
+        disputes: {
+          orderBy: {
+            createdAt: 'desc'
+          }
+        }
       }
     })
 
@@ -382,6 +387,42 @@ export async function PATCH(
           where: { id: params.id },
           data: {
             refundStatus: 'REJECTED'
+          }
+        })
+        break
+
+      case 'create_dispute':
+        // 买家申诉（TRANSFERRING状态未收到货）
+        if (order.status !== 'TRANSFERRING') {
+          return NextResponse.json<ApiResponse>({
+            success: false,
+            error: '只有转移中的订单才能申诉'
+          }, { status: 400 })
+        }
+
+        if (order.buyerId !== payload.userId) {
+          return NextResponse.json<ApiResponse>({
+            success: false,
+            error: '只有买家可以发起申诉'
+          }, { status: 403 })
+        }
+
+        // 创建申诉记录
+        await prisma.dispute.create({
+          data: {
+            orderId: order.id,
+            initiatorId: payload.userId,
+            reason: body.reason || '未收到FSD权限',
+            description: body.description || '卖家已标记发货，但买家未收到FSD权限',
+            status: 'PENDING'
+          }
+        })
+
+        // 更新订单状态为申诉中
+        updatedOrder = await prisma.order.update({
+          where: { id: params.id },
+          data: {
+            status: 'DISPUTE'
           }
         })
         break

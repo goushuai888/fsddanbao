@@ -44,6 +44,14 @@ interface Order {
     phone: string
     verified: boolean
   } | null
+  disputes?: Array<{
+    id: string
+    reason: string
+    description: string
+    status: string
+    createdAt: string
+    resolvedAt: string | null
+  }>
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; description: string }> = {
@@ -67,6 +75,11 @@ const STATUS_MAP: Record<string, { label: string; color: string; description: st
     color: 'bg-gray-100 text-gray-800',
     description: '交易已完成'
   },
+  DISPUTE: {
+    label: '申诉中',
+    color: 'bg-orange-100 text-orange-800',
+    description: '买家已发起申诉，平台正在处理中'
+  },
   CANCELLED: {
     label: '已取消',
     color: 'bg-red-100 text-red-800',
@@ -87,6 +100,8 @@ export default function OrderDetailPage() {
   const [transferNote, setTransferNote] = useState('')
   const [showRefundDialog, setShowRefundDialog] = useState(false)
   const [refundReason, setRefundReason] = useState('')
+  const [showDisputeDialog, setShowDisputeDialog] = useState(false)
+  const [disputeDescription, setDisputeDescription] = useState('')
 
   useEffect(() => {
     // 检查登录状态
@@ -133,8 +148,8 @@ export default function OrderDetailPage() {
   }
 
   const handleAction = async (action: string, extraData?: any) => {
-    // 退款申请不需要二次确认
-    if (action !== 'request_refund') {
+    // 退款申请和申诉不需要二次确认
+    if (action !== 'request_refund' && action !== 'create_dispute') {
       if (!confirm(`确定要执行此操作吗？`)) {
         return
       }
@@ -170,7 +185,8 @@ export default function OrderDetailPage() {
       if (data.success) {
         const message = action === 'request_refund' ? '退款申请已提交，等待卖家处理' :
                        action === 'approve_refund' ? '已同意退款，款项将退还给买家' :
-                       action === 'reject_refund' ? '已拒绝退款申请' : '操作成功！'
+                       action === 'reject_refund' ? '已拒绝退款申请' :
+                       action === 'create_dispute' ? '申诉已提交，平台将介入处理' : '操作成功！'
         alert(message)
         fetchOrderDetail()
       } else {
@@ -433,6 +449,38 @@ export default function OrderDetailPage() {
                     </div>
                   </div>
                 )}
+                {order.disputes && order.disputes.length > 0 && order.disputes.map((dispute) => (
+                  <div key={dispute.id} className="flex items-center gap-3">
+                    <div className="w-2 h-2 bg-orange-600 rounded-full"></div>
+                    <div>
+                      <span className="font-medium text-orange-600">发起申诉</span>
+                      <span className="text-sm text-gray-500 ml-2">
+                        {formatDate(dispute.createdAt)}
+                      </span>
+                      <span className="block text-xs text-gray-600 mt-1">
+                        原因：{dispute.reason}
+                      </span>
+                      <span className="block text-xs text-gray-500 mt-1">
+                        {dispute.description}
+                      </span>
+                      {dispute.status === 'PENDING' && (
+                        <span className="block text-xs text-orange-600 mt-1">
+                          状态：待平台处理
+                        </span>
+                      )}
+                      {dispute.status === 'PROCESSING' && (
+                        <span className="block text-xs text-blue-600 mt-1">
+                          状态：平台处理中
+                        </span>
+                      )}
+                      {dispute.status === 'RESOLVED' && dispute.resolvedAt && (
+                        <span className="block text-xs text-green-600 mt-1">
+                          状态：已解决 - {formatDate(dispute.resolvedAt)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
                 {order.cancelledAt && (
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 bg-red-600 rounded-full"></div>
@@ -539,10 +587,10 @@ export default function OrderDetailPage() {
                 </div>
               )}
 
-              {/* 买家确认收货 */}
+              {/* 买家确认收货或申诉 */}
               {order.status === 'TRANSFERRING' && isBuyer && (
-                <div>
-                  <p className="text-sm text-gray-600 mb-3">
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600">
                     请确认您已在Tesla App中收到FSD权限
                   </p>
                   <Button
@@ -552,6 +600,15 @@ export default function OrderDetailPage() {
                     className="w-full"
                   >
                     {actionLoading ? '确认中...' : '确认收货'}
+                  </Button>
+                  <Button
+                    onClick={() => setShowDisputeDialog(true)}
+                    disabled={actionLoading}
+                    variant="outline"
+                    size="lg"
+                    className="w-full border-red-300 text-red-600 hover:bg-red-50"
+                  >
+                    未收到货，申诉
                   </Button>
                 </div>
               )}
@@ -689,6 +746,59 @@ export default function OrderDetailPage() {
                 onClick={() => {
                   setShowRefundDialog(false)
                   setRefundReason('')
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                取消
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 申诉对话框 */}
+      {showDisputeDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <h3 className="text-lg font-medium mb-4 text-red-600">未收到货申诉</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">申诉理由</label>
+              <textarea
+                className="w-full border rounded-md p-2 min-h-[120px]"
+                placeholder="请详细说明情况，例如：&#10;- 未在Tesla App中收到FSD权限&#10;- 卖家提供的凭证与实际不符&#10;- 其他问题..."
+                value={disputeDescription}
+                onChange={(e) => setDisputeDescription(e.target.value)}
+              />
+            </div>
+            <div className="bg-yellow-50 p-3 rounded-md mb-4">
+              <p className="text-sm text-yellow-800">
+                ⚠️ 提交申诉后，订单将进入平台仲裁流程，管理员将介入处理。
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  if (!disputeDescription.trim()) {
+                    alert('请填写申诉理由')
+                    return
+                  }
+                  handleAction('create_dispute', {
+                    reason: '未收到FSD权限',
+                    description: disputeDescription
+                  })
+                  setShowDisputeDialog(false)
+                  setDisputeDescription('')
+                }}
+                disabled={actionLoading}
+                className="flex-1 bg-red-600 hover:bg-red-700"
+              >
+                提交申诉
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowDisputeDialog(false)
+                  setDisputeDescription('')
                 }}
                 variant="outline"
                 className="flex-1"
