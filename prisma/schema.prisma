@@ -1,0 +1,197 @@
+// FSD担保交易平台数据库设计
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 用户表
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String?
+  phone         String?
+  avatar        String?
+  role          Role      @default(BUYER)
+  verified      Boolean   @default(false)  // 是否实名认证
+  balance       Float     @default(0)      // 账户余额
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // 关联
+  sellOrders    Order[]   @relation("SellerOrders")
+  buyOrders     Order[]   @relation("BuyerOrders")
+  payments      Payment[]
+  disputes      Dispute[]
+  givenReviews  Review[]  @relation("Reviewer")
+  receivedReviews Review[] @relation("Reviewee")
+}
+
+enum Role {
+  BUYER
+  SELLER
+  ADMIN
+}
+
+// 订单表
+model Order {
+  id              String      @id @default(cuid())
+  orderNo         String      @unique  // 订单编号
+
+  // 关联用户
+  sellerId        String
+  seller          User        @relation("SellerOrders", fields: [sellerId], references: [id])
+  buyerId         String?
+  buyer           User?       @relation("BuyerOrders", fields: [buyerId], references: [id])
+
+  // 订单状态
+  status          OrderStatus @default(PUBLISHED)
+
+  // 车辆和FSD信息
+  vehicleBrand    String      // 车辆品牌
+  vehicleModel    String      // 车辆型号
+  vehicleYear     Int         // 车辆年份
+  vin             String?     // 车架号(部分隐藏)
+  fsdVersion      String      // FSD版本
+
+  // 价格信息
+  price           Float       // 售价
+  escrowAmount    Float?      // 实际担保金额
+  platformFee     Float?      // 平台手续费
+
+  // 转移凭证
+  transferProof   String?     // 转移凭证图片/文件URL
+  transferNote    String?     // 转移说明
+
+  // 退款申请
+  refundRequested Boolean     @default(false)  // 是否有退款申请
+  refundReason    String?                      // 退款原因
+  refundRequestedAt DateTime?                  // 退款申请时间
+  refundStatus    RefundStatus?                // 退款申请状态
+
+  // 时间戳
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  paidAt          DateTime?   // 支付时间
+  transferredAt   DateTime?   // 转移完成时间
+  completedAt     DateTime?   // 订单完成时间
+  cancelledAt     DateTime?   // 取消时间
+
+  // 关联
+  payments        Payment[]
+  disputes        Dispute[]
+  reviews         Review[]
+}
+
+enum OrderStatus {
+  PUBLISHED      // 已发布
+  PAID           // 已支付(买家已付款到担保)
+  TRANSFERRING   // 转移中(卖家已发起转移)
+  CONFIRMING     // 待确认(买家确认中)
+  COMPLETED      // 已完成
+  CANCELLED      // 已取消
+  DISPUTE        // 申诉中
+}
+
+// 支付记录表
+model Payment {
+  id              String        @id @default(cuid())
+
+  // 关联
+  orderId         String
+  order           Order         @relation(fields: [orderId], references: [id])
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+
+  // 支付信息
+  amount          Float
+  type            PaymentType
+  status          PaymentStatus @default(PENDING)
+  paymentMethod   String?       // 支付方式(alipay/wechat/bank)
+  transactionId   String?       // 第三方交易ID
+
+  // 备注
+  note            String?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+enum PaymentType {
+  ESCROW    // 托管支付(买家付款到平台)
+  RELEASE   // 释放款项(平台付款给卖家)
+  REFUND    // 退款(平台退款给买家)
+  WITHDRAW  // 提现
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// 申诉/纠纷表
+model Dispute {
+  id              String        @id @default(cuid())
+
+  // 关联
+  orderId         String
+  order           Order         @relation(fields: [orderId], references: [id])
+  initiatorId     String        // 发起人
+  initiator       User          @relation(fields: [initiatorId], references: [id])
+
+  // 申诉信息
+  reason          String        // 申诉原因
+  description     String        // 详细描述
+  evidence        String?       // 证据(图片URLs，JSON格式)
+  status          DisputeStatus @default(PENDING)
+
+  // 处理结果
+  resolution      String?       // 处理结果
+  resolvedBy      String?       // 处理人
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  resolvedAt      DateTime?
+}
+
+enum DisputeStatus {
+  PENDING    // 待处理
+  PROCESSING // 处理中
+  RESOLVED   // 已解决
+  CLOSED     // 已关闭
+}
+
+// 退款状态
+enum RefundStatus {
+  PENDING    // 待处理
+  APPROVED   // 已同意
+  REJECTED   // 已拒绝
+}
+
+// 评价表
+model Review {
+  id              String    @id @default(cuid())
+
+  // 关联
+  orderId         String
+  order           Order     @relation(fields: [orderId], references: [id])
+  reviewerId      String    // 评价人
+  reviewer        User      @relation("Reviewer", fields: [reviewerId], references: [id])
+  revieweeId      String    // 被评价人
+  reviewee        User      @relation("Reviewee", fields: [revieweeId], references: [id])
+
+  // 评价内容
+  rating          Int       // 评分 1-5
+  comment         String?   // 评价内容
+
+  createdAt       DateTime  @default(now())
+
+  @@unique([orderId, reviewerId])
+}
