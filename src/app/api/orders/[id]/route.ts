@@ -167,15 +167,57 @@ export async function PATCH(
           }, { status: 400 })
         }
 
-        updatedOrder = await prisma.order.update({
-          where: { id: params.id },
-          data: {
-            buyerId: payload.userId,
-            status: 'PAID',
-            paidAt: new Date(),
-            escrowAmount: order.price
-          }
-        })
+        // ✅ 安全修复: 使用事务和乐观锁防止竞态条件
+        try {
+          updatedOrder = await prisma.$transaction(async (tx) => {
+            // 1. 使用updateMany和版本号实现乐观锁
+            const result = await tx.order.updateMany({
+              where: {
+                id: params.id,
+                status: 'PUBLISHED',
+                version: order.version || 0  // 版本号必须匹配
+              },
+              data: {
+                buyerId: payload.userId,
+                status: 'PAID',
+                paidAt: new Date(),
+                escrowAmount: order.price,
+                version: {
+                  increment: 1  // 版本号+1
+                }
+              }
+            })
+
+            // 2. 检查更新是否成功
+            if (result.count === 0) {
+              throw new Error('订单已被其他买家购买或状态已变更')
+            }
+
+            // 3. 创建托管支付记录
+            await tx.payment.create({
+              data: {
+                orderId: order.id,
+                userId: payload.userId,
+                amount: order.price,
+                type: 'ESCROW',
+                status: 'COMPLETED',
+                note: '买家支付到平台托管'
+              }
+            })
+
+            // 4. 重新查询订单获取最新数据
+            const updated = await tx.order.findUnique({
+              where: { id: params.id }
+            })
+
+            return updated!
+          })
+        } catch (error) {
+          return NextResponse.json<ApiResponse>({
+            success: false,
+            error: error instanceof Error ? error.message : '支付失败,请重试'
+          }, { status: 409 })
+        }
         break
 
       case 'transfer':
@@ -221,23 +263,43 @@ export async function PATCH(
           }, { status: 403 })
         }
 
-        updatedOrder = await prisma.order.update({
-          where: { id: params.id },
-          data: {
-            status: 'COMPLETED',
-            completedAt: new Date()
-          }
-        })
+        // ✅ 安全修复: 使用事务保证数据一致性
+        updatedOrder = await prisma.$transaction(async (tx) => {
+          // 1. 更新订单状态为已完成
+          const completed = await tx.order.update({
+            where: { id: params.id },
+            data: {
+              status: 'COMPLETED',
+              completedAt: new Date()
+            }
+          })
 
-        // 创建付款记录给卖家
-        await prisma.payment.create({
-          data: {
-            orderId: order.id,
-            userId: order.sellerId,
-            amount: order.price - (order.platformFee || 0),
-            type: 'RELEASE',
-            status: 'COMPLETED'
-          }
+          // 2. 计算卖家应得金额(扣除平台手续费)
+          const releaseAmount = order.price - (order.platformFee || 0)
+
+          // 3. 创建释放款项记录
+          await tx.payment.create({
+            data: {
+              orderId: order.id,
+              userId: order.sellerId,
+              amount: releaseAmount,
+              type: 'RELEASE',
+              status: 'COMPLETED',
+              note: '订单完成,释放款项给卖家'
+            }
+          })
+
+          // 4. 更新卖家余额
+          await tx.user.update({
+            where: { id: order.sellerId },
+            data: {
+              balance: {
+                increment: releaseAmount
+              }
+            }
+          })
+
+          return completed
         })
         break
 
@@ -271,26 +333,45 @@ export async function PATCH(
           }, { status: 403 })
         }
 
-        updatedOrder = await prisma.order.update({
-          where: { id: params.id },
-          data: {
-            status: 'CANCELLED',
-            cancelledAt: new Date()
-          }
-        })
-
-        // 如果已支付,创建退款记录
-        if (order.status === 'PAID' && order.buyerId) {
-          await prisma.payment.create({
+        // ✅ 安全修复: 使用事务保证取消和退款的原子性
+        updatedOrder = await prisma.$transaction(async (tx) => {
+          // 1. 更新订单状态为已取消
+          const cancelled = await tx.order.update({
+            where: { id: params.id },
             data: {
-              orderId: order.id,
-              userId: order.buyerId,
-              amount: order.escrowAmount || order.price,
-              type: 'REFUND',
-              status: 'COMPLETED'
+              status: 'CANCELLED',
+              cancelledAt: new Date()
             }
           })
-        }
+
+          // 2. 如果已支付,创建退款记录并更新买家余额
+          if (order.status === 'PAID' && order.buyerId) {
+            const refundAmount = order.escrowAmount || order.price
+
+            await tx.payment.create({
+              data: {
+                orderId: order.id,
+                userId: order.buyerId,
+                amount: refundAmount,
+                type: 'REFUND',
+                status: 'COMPLETED',
+                note: '订单取消,退款给买家'
+              }
+            })
+
+            // 3. 更新买家余额
+            await tx.user.update({
+              where: { id: order.buyerId },
+              data: {
+                balance: {
+                  increment: refundAmount
+                }
+              }
+            })
+          }
+
+          return cancelled
+        })
         break
 
       case 'request_refund':
@@ -343,28 +424,46 @@ export async function PATCH(
           }, { status: 400 })
         }
 
-        updatedOrder = await prisma.order.update({
-          where: { id: params.id },
-          data: {
-            status: 'CANCELLED',
-            refundStatus: 'APPROVED',
-            cancelledAt: new Date()
-          }
-        })
-
-        // 创建退款记录
-        if (order.buyerId) {
-          await prisma.payment.create({
+        // ✅ 安全修复: 使用事务保证退款操作的原子性
+        updatedOrder = await prisma.$transaction(async (tx) => {
+          // 1. 更新订单状态
+          const refunded = await tx.order.update({
+            where: { id: params.id },
             data: {
-              orderId: order.id,
-              userId: order.buyerId,
-              amount: order.escrowAmount || order.price,
-              type: 'REFUND',
-              status: 'COMPLETED',
-              note: '卖家同意退款申请'
+              status: 'CANCELLED',
+              refundStatus: 'APPROVED',
+              cancelledAt: new Date()
             }
           })
-        }
+
+          // 2. 创建退款记录并更新买家余额
+          if (order.buyerId) {
+            const refundAmount = order.escrowAmount || order.price
+
+            await tx.payment.create({
+              data: {
+                orderId: order.id,
+                userId: order.buyerId,
+                amount: refundAmount,
+                type: 'REFUND',
+                status: 'COMPLETED',
+                note: '卖家同意退款申请'
+              }
+            })
+
+            // 3. 更新买家余额
+            await tx.user.update({
+              where: { id: order.buyerId },
+              data: {
+                balance: {
+                  increment: refundAmount
+                }
+              }
+            })
+          }
+
+          return refunded
+        })
         break
 
       case 'reject_refund':

@@ -31,6 +31,7 @@ model User {
   givenReviews  Review[]  @relation("Reviewer")
   receivedReviews Review[] @relation("Reviewee")
   withdrawals   Withdrawal[]
+  auditLogs     AuditLog[]  // 审计日志
 }
 
 enum Role {
@@ -83,10 +84,20 @@ model Order {
   completedAt     DateTime?   // 订单完成时间
   cancelledAt     DateTime?   // 取消时间
 
+  // ✅ 安全修复: 乐观锁版本控制,防止并发问题
+  version         Int         @default(0)
+
   // 关联
   payments        Payment[]
   disputes        Dispute[]
   reviews         Review[]
+
+  // ✅ 性能优化: 添加数据库索引
+  @@index([sellerId, status])  // 卖家查看自己的订单
+  @@index([buyerId, status])   // 买家查看自己的订单
+  @@index([status, createdAt]) // 按状态筛选并按时间排序
+  @@index([createdAt])         // 按时间排序
+  @@index([status])            // 管理员按状态筛选
 }
 
 enum OrderStatus {
@@ -121,6 +132,12 @@ model Payment {
 
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+
+  // ✅ 性能优化: 添加数据库索引
+  @@index([orderId])           // JOIN查询优化
+  @@index([userId, type])      // 用户查看自己的支付记录
+  @@index([status, createdAt]) // 按状态筛选并按时间排序
+  @@index([type])              // 按支付类型筛选
 }
 
 enum PaymentType {
@@ -160,6 +177,11 @@ model Dispute {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   resolvedAt      DateTime?
+
+  // ✅ 性能优化: 添加数据库索引
+  @@index([orderId])           // 查询订单的所有申诉
+  @@index([status, createdAt]) // 管理员按状态筛选申诉
+  @@index([initiatorId])       // 查询用户发起的申诉
 }
 
 enum DisputeStatus {
@@ -233,6 +255,11 @@ model Withdrawal {
 
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
+
+  // ✅ 性能优化: 添加数据库索引
+  @@index([userId, status])    // 用户查看自己的提现记录
+  @@index([status, createdAt]) // 管理员按状态筛选提现申请
+  @@index([createdAt])         // 按时间排序
 }
 
 enum WithdrawalStatus {
@@ -242,4 +269,35 @@ enum WithdrawalStatus {
   PROCESSING    // 处理中
   COMPLETED     // 已完成
   FAILED        // 失败
+}
+
+// ✅ 安全增强: 管理员审计日志表
+model AuditLog {
+  id          String    @id @default(cuid())
+
+  // 操作人
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+
+  // 操作信息
+  action      String    // 操作类型: UPDATE_BALANCE, APPROVE_WITHDRAWAL, REJECT_WITHDRAWAL等
+  target      String?   // 目标对象ID(用户ID/订单ID/提现ID等)
+  targetType  String?   // 目标类型: User, Order, Withdrawal等
+
+  // 操作详情
+  oldValue    Json?     // 操作前的值
+  newValue    Json?     // 操作后的值
+  description String?   // 操作描述
+
+  // 请求信息
+  ip          String?   // 操作IP
+  userAgent   String?   // 用户代理
+
+  createdAt   DateTime  @default(now())
+
+  // ✅ 性能优化: 添加索引
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([target])
+  @@index([createdAt])
 }
