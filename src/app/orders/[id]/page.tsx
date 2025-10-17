@@ -31,6 +31,8 @@ interface Order {
   refundReason: string | null
   refundRequestedAt: string | null
   refundStatus: string | null
+  refundRejectedReason: string | null
+  refundRejectedAt: string | null
   seller: {
     id: string
     name: string
@@ -101,6 +103,8 @@ export default function OrderDetailPage() {
   const [transferNote, setTransferNote] = useState('')
   const [showRefundDialog, setShowRefundDialog] = useState(false)
   const [refundReason, setRefundReason] = useState('')
+  const [showRejectDialog, setShowRejectDialog] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
   const [showDisputeDialog, setShowDisputeDialog] = useState(false)
   const [disputeDescription, setDisputeDescription] = useState('')
 
@@ -498,9 +502,26 @@ export default function OrderDetailPage() {
                           退款已处理，款项已退还给买家
                         </span>
                       )}
-                      {order.refundStatus === 'REJECTED' && order.refundReason && (
-                        <span className="block text-xs text-gray-500 mt-1">
-                          退款申请被拒绝
+                      {order.refundStatus === 'REJECTED' && order.refundRejectedReason && (
+                        <span className="block text-xs text-red-600 mt-1">
+                          拒绝理由：{order.refundRejectedReason}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {/* 拒绝退款单独显示（如果没有取消订单） */}
+                {order.refundStatus === 'REJECTED' && !order.cancelledAt && order.refundRejectedAt && (
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 bg-red-600 rounded-full"></div>
+                    <div>
+                      <span className="font-medium text-red-600">拒绝退款</span>
+                      <span className="text-sm text-gray-500 ml-2">
+                        {formatDate(order.refundRejectedAt)}
+                      </span>
+                      {order.refundRejectedReason && (
+                        <span className="block text-xs text-red-600 mt-1">
+                          拒绝理由：{order.refundRejectedReason}
                         </span>
                       )}
                     </div>
@@ -655,6 +676,29 @@ export default function OrderDetailPage() {
                       {order.refundStatus === 'PENDING' ? '待卖家处理' : order.refundStatus === 'APPROVED' ? '已同意' : '已拒绝'}
                     </span>
                   </p>
+                  {/* 显示拒绝理由 */}
+                  {order.refundStatus === 'REJECTED' && order.refundRejectedReason && (
+                    <>
+                      <p className="text-sm text-red-600 mt-2">拒绝时间：{formatDate(order.refundRejectedAt!)}</p>
+                      <p className="text-sm text-red-600">拒绝理由：{order.refundRejectedReason}</p>
+                    </>
+                  )}
+                  {/* 买家在退款被拒绝后可以申请平台介入 */}
+                  {order.refundStatus === 'REJECTED' && isBuyer && (
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-sm text-gray-600 mb-2">
+                        对拒绝结果不满意？您可以申请平台介入处理
+                      </p>
+                      <Button
+                        onClick={() => setShowDisputeDialog(true)}
+                        variant="default"
+                        className="w-full bg-orange-600 hover:bg-orange-700"
+                        size="sm"
+                      >
+                        申请平台介入
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -670,12 +714,12 @@ export default function OrderDetailPage() {
                     {actionLoading ? '处理中...' : '同意退款'}
                   </Button>
                   <Button
-                    onClick={() => handleAction('reject_refund')}
+                    onClick={() => setShowRejectDialog(true)}
                     disabled={actionLoading}
                     variant="outline"
                     className="w-full"
                   >
-                    {actionLoading ? '处理中...' : '拒绝退款'}
+                    拒绝退款
                   </Button>
                 </div>
               )}
@@ -758,16 +802,79 @@ export default function OrderDetailPage() {
         </div>
       )}
 
+      {/* 拒绝退款对话框 */}
+      {showRejectDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg w-full max-w-md">
+            <h3 className="text-lg font-medium mb-4">拒绝退款</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2 text-red-600">
+                拒绝理由 <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                className="w-full border rounded-md p-2 min-h-[100px]"
+                placeholder="请说明拒绝退款的理由...&#10;例如：&#10;- 买家已收到FSD权限&#10;- 转移凭证有效&#10;- 其他原因..."
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+              />
+            </div>
+            <div className="bg-yellow-50 p-3 rounded-md mb-4">
+              <p className="text-sm text-yellow-800">
+                ⚠️ 请务必填写拒绝理由，这将记录在订单时间线中
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  if (!rejectReason.trim()) {
+                    alert('请填写拒绝理由')
+                    return
+                  }
+                  handleAction('reject_refund', { reason: rejectReason })
+                  setShowRejectDialog(false)
+                  setRejectReason('')
+                }}
+                disabled={actionLoading}
+                variant="destructive"
+                className="flex-1"
+              >
+                {actionLoading ? '处理中...' : '确认拒绝'}
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowRejectDialog(false)
+                  setRejectReason('')
+                }}
+                variant="outline"
+                className="flex-1"
+              >
+                取消
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 申诉对话框 */}
       {showDisputeDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-md">
-            <h3 className="text-lg font-medium mb-4 text-red-600">未收到货申诉</h3>
+            <h3 className="text-lg font-medium mb-4 text-red-600">
+              {order?.status === 'PAID' && order.refundStatus === 'REJECTED'
+                ? '申请平台介入'
+                : '未收到货申诉'}
+            </h3>
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">申诉理由</label>
+              <label className="block text-sm font-medium mb-2">
+                {order?.status === 'PAID' ? '您的诉求' : '申诉理由'}
+              </label>
               <textarea
                 className="w-full border rounded-md p-2 min-h-[120px]"
-                placeholder="请详细说明情况，例如：&#10;- 未在Tesla App中收到FSD权限&#10;- 卖家提供的凭证与实际不符&#10;- 其他问题..."
+                placeholder={
+                  order?.status === 'PAID'
+                    ? "请说明您的诉求...\n- 要求平台核实情况后退款\n- 卖家拒绝理由不成立\n- 其他诉求..."
+                    : "请详细说明情况，例如：\n- 未在Tesla App中收到FSD权限\n- 卖家提供的凭证与实际不符\n- 其他问题..."
+                }
                 value={disputeDescription}
                 onChange={(e) => setDisputeDescription(e.target.value)}
               />
@@ -775,6 +882,11 @@ export default function OrderDetailPage() {
             <div className="bg-yellow-50 p-3 rounded-md mb-4">
               <p className="text-sm text-yellow-800">
                 ⚠️ 提交申诉后，订单将进入平台仲裁流程，管理员将介入处理。
+                {order?.status === 'PAID' && order.refundStatus === 'REJECTED' && (
+                  <span className="block mt-1">
+                    平台将核实您的退款申请和卖家的拒绝理由，做出公正裁决。
+                  </span>
+                )}
               </p>
             </div>
             <div className="flex gap-2">
@@ -784,8 +896,11 @@ export default function OrderDetailPage() {
                     alert('请填写申诉理由')
                     return
                   }
+                  const reason = order?.status === 'PAID'
+                    ? '退款申请被拒绝，申请平台介入'
+                    : '未收到FSD权限'
                   handleAction('create_dispute', {
-                    reason: '未收到FSD权限',
+                    reason,
                     description: disputeDescription
                   })
                   setShowDisputeDialog(false)

@@ -482,21 +482,43 @@ export async function PATCH(
           }, { status: 400 })
         }
 
+        // 验证是否提供了拒绝理由
+        if (!body.reason || body.reason.trim() === '') {
+          return NextResponse.json<ApiResponse>({
+            success: false,
+            error: '请填写拒绝退款的理由'
+          }, { status: 400 })
+        }
+
         updatedOrder = await prisma.order.update({
           where: { id: params.id },
           data: {
-            refundStatus: 'REJECTED'
+            refundStatus: 'REJECTED',
+            refundRejectedReason: body.reason,
+            refundRejectedAt: new Date()
           }
         })
         break
 
       case 'create_dispute':
-        // 买家申诉（TRANSFERRING状态未收到货）
-        if (order.status !== 'TRANSFERRING') {
+        // 买家申诉
+        // 1. TRANSFERRING状态：未收到货
+        // 2. PAID状态：退款被拒绝
+        if (order.status !== 'TRANSFERRING' && order.status !== 'PAID') {
           return NextResponse.json<ApiResponse>({
             success: false,
-            error: '只有转移中的订单才能申诉'
+            error: '只有转移中或已支付的订单才能申诉'
           }, { status: 400 })
+        }
+
+        // PAID状态申诉必须是退款被拒绝的情况
+        if (order.status === 'PAID') {
+          if (!order.refundRequested || order.refundStatus !== 'REJECTED') {
+            return NextResponse.json<ApiResponse>({
+              success: false,
+              error: '只有退款被拒绝后才能申请平台介入'
+            }, { status: 400 })
+          }
         }
 
         if (order.buyerId !== payload.userId) {
@@ -507,12 +529,20 @@ export async function PATCH(
         }
 
         // 创建申诉记录
+        const disputeReason = order.status === 'PAID'
+          ? '退款申请被拒绝，申请平台介入'
+          : body.reason || '未收到FSD权限'
+
+        const disputeDesc = order.status === 'PAID'
+          ? `买家申请退款被卖家拒绝。\n\n买家退款原因：${order.refundReason}\n\n卖家拒绝理由：${order.refundRejectedReason}\n\n买家诉求：${body.description || '要求平台介入，核实情况后退款'}`
+          : body.description || '卖家已标记发货，但买家未收到FSD权限'
+
         await prisma.dispute.create({
           data: {
             orderId: order.id,
             initiatorId: payload.userId,
-            reason: body.reason || '未收到FSD权限',
-            description: body.description || '卖家已标记发货，但买家未收到FSD权限',
+            reason: disputeReason,
+            description: disputeDesc,
             status: 'PENDING'
           }
         })

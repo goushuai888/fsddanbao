@@ -72,9 +72,11 @@ model Order {
 
   // 退款申请
   refundRequested Boolean     @default(false)  // 是否有退款申请
-  refundReason    String?                      // 退款原因
+  refundReason    String?                      // 买家退款申请原因
   refundRequestedAt DateTime?                  // 退款申请时间
   refundStatus    RefundStatus?                // 退款申请状态
+  refundRejectedReason String?                 // 卖家拒绝退款理由
+  refundRejectedAt DateTime?                   // 拒绝退款时间
 
   // 时间戳
   createdAt       DateTime    @default(now())
