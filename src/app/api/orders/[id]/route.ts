@@ -4,6 +4,7 @@ import { verifyToken } from '@/lib/auth'
 import { sensitiveLimiter, apiLimiter, checkRateLimit } from '@/lib/ratelimit'
 import { orderActionSchema } from '@/lib/validations/order'
 import { calculateRefundDeadline } from '@/lib/constants/refund-config'
+import { calculateConfirmDeadline } from '@/lib/constants/confirm-config'
 import { ApiResponse } from '@/types'
 
 // 获取订单详情
@@ -308,6 +309,11 @@ export async function PATCH(
 
         // ✅ 并发保护: 使用乐观锁和状态检查
         try {
+          // 计算确认截止时间
+          const transferTime = new Date()
+          const isVerifiedSeller = order.seller?.verified || false
+          const confirmDeadline = calculateConfirmDeadline(transferTime, isVerifiedSeller)
+
           const result = await prisma.order.updateMany({
             where: {
               id: params.id,
@@ -318,7 +324,8 @@ export async function PATCH(
               status: 'TRANSFERRING',
               transferProof: body.transferProof,
               transferNote: body.transferNote,
-              transferredAt: new Date(),
+              transferredAt: transferTime,
+              confirmDeadline: confirmDeadline,  // 设置确认截止时间
               version: {
                 increment: 1
               }

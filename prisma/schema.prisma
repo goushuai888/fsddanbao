@@ -86,6 +86,10 @@ model Order {
   refundExtensionGrantedAt DateTime?           // 延期批准时间
   refundAutoApproved Boolean @default(false)   // 是否因超时自动同意退款
 
+  // ✅ 确认收货时间限制
+  confirmDeadline DateTime?                    // 买家确认收货的截止时间
+  autoConfirmed Boolean @default(false)        // 是否自动确认收货（超时）
+
   // 时间戳
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt

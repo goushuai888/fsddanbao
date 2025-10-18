@@ -32,6 +32,8 @@ export interface Order {
   refundExtensionRequested: boolean      // 是否申请延期
   refundExtensionReason: string | null   // 延期理由
   refundExtensionGrantedAt: string | null  // 延期批准时间
+  confirmDeadline: string | null         // 确认收货截止时间
+  autoConfirmed: boolean                 // 是否自动确认收货
   seller: UserInfo
   sellerId: string  // 添加 sellerId 字段
   buyer: UserInfo | null
