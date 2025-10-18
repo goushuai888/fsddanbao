@@ -25,7 +25,6 @@ import { OrderVehicleInfo, OrderPriceInfo, OrderUserInfo } from '@/components/or
 import { OrderTimeline } from '@/components/orders/OrderTimeline'
 import { RefundDialog, RejectRefundDialog, DisputeDialog } from '@/components/orders/dialogs'
 import { RefundCountdown } from '@/components/orders/RefundCountdown'
-import { ConfirmCountdown } from '@/components/orders/ConfirmCountdown'
 
 // Hooks
 import { useAuth } from '@/hooks/useAuth'
@@ -201,6 +200,12 @@ export default function OrderDetailPage() {
               status={order.status}
               userRole={userRole}
               hasRefundRequest={order.refundRequested}
+              confirmDeadline={order.confirmDeadline}
+              autoConfirmed={order.autoConfirmed}
+              onConfirmTimeout={() => {
+                console.warn('确认收货期限已到，刷新订单数据')
+                refetch()
+              }}
             />
           </div>
 
@@ -216,22 +221,6 @@ export default function OrderDetailPage() {
           <div className="mb-6">
             <OrderTimeline events={timelineEvents} />
           </div>
-
-          {/* 确认收货倒计时 - TRANSFERRING状态显示 */}
-          {order.status === 'TRANSFERRING' && order.confirmDeadline && (
-            <div className="mb-6">
-              <ConfirmCountdown
-                deadline={order.confirmDeadline}
-                autoConfirmed={order.autoConfirmed}
-                userRole={isBuyer ? 'buyer' : 'seller'}
-                onTimeout={() => {
-                  // 超时后刷新订单数据
-                  console.warn('确认收货期限已到，刷新订单数据')
-                  refetch()
-                }}
-              />
-            </div>
-          )}
 
           {/* 转移凭证 */}
           {order.transferProof && (() => {
