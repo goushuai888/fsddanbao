@@ -7,6 +7,36 @@ import { calculateRefundDeadline } from '@/lib/constants/refund-config'
 import { calculateConfirmDeadline } from '@/lib/constants/confirm-config'
 import { ApiResponse } from '@/types'
 
+/**
+ * 自动修复缺失confirmDeadline的TRANSFERRING订单
+ * 用于处理功能上线前已存在的订单
+ */
+async function ensureConfirmDeadline(order: any): Promise<any> {
+  // 只处理TRANSFERRING状态且缺少confirmDeadline的订单
+  if (order.status === 'TRANSFERRING' && !order.confirmDeadline && order.transferredAt) {
+    const isVerifiedSeller = order.seller?.verified || false
+    const confirmDeadline = calculateConfirmDeadline(
+      new Date(order.transferredAt),
+      isVerifiedSeller
+    )
+
+    // 更新数据库
+    try {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { confirmDeadline }
+      })
+
+      // 更新返回的订单对象
+      order.confirmDeadline = confirmDeadline
+    } catch (error) {
+      console.error('自动设置confirmDeadline失败:', error)
+    }
+  }
+
+  return order
+}
+
 // 获取订单详情
 export async function GET(
   request: NextRequest,
@@ -80,27 +110,30 @@ export async function GET(
       }, { status: 404 })
     }
 
+    // ✅ 自动修复缺失confirmDeadline的TRANSFERRING订单
+    const fixedOrder = await ensureConfirmDeadline(order)
+
     // 检查权限
     // 管理员可以查看所有订单
     if (payload.role === 'ADMIN') {
       return NextResponse.json<ApiResponse>({
         success: true,
-        data: order
+        data: fixedOrder
       })
     }
 
     // 卖家可以查看自己的所有订单（包括已取消的）
-    if (order.sellerId === payload.userId) {
+    if (fixedOrder.sellerId === payload.userId) {
       return NextResponse.json<ApiResponse>({
         success: true,
-        data: order
+        data: fixedOrder
       })
     }
 
     // 买家权限检查
-    if (order.buyerId === payload.userId) {
+    if (fixedOrder.buyerId === payload.userId) {
       // 如果订单已取消且买家没有参与过交易（没有付款记录），则不能查看
-      if (order.status === 'CANCELLED' && !order.paidAt) {
+      if (fixedOrder.status === 'CANCELLED' && !fixedOrder.paidAt) {
         return NextResponse.json<ApiResponse>({
           success: false,
           error: '此订单已被卖家取消'
@@ -108,15 +141,15 @@ export async function GET(
       }
       return NextResponse.json<ApiResponse>({
         success: true,
-        data: order
+        data: fixedOrder
       })
     }
 
     // PUBLISHED状态的订单，所有登录用户都可以查看（用于浏览和购买）
-    if (order.status === 'PUBLISHED') {
+    if (fixedOrder.status === 'PUBLISHED') {
       return NextResponse.json<ApiResponse>({
         success: true,
-        data: order
+        data: fixedOrder
       })
     }
 

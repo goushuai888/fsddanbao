@@ -223,6 +223,7 @@ export default function OrderDetailPage() {
               <ConfirmCountdown
                 deadline={order.confirmDeadline}
                 autoConfirmed={order.autoConfirmed}
+                userRole={isBuyer ? 'buyer' : 'seller'}
                 onTimeout={() => {
                   // 超时后刷新订单数据
                   console.warn('确认收货期限已到，刷新订单数据')
