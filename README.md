@@ -155,7 +155,7 @@ cp .env.production.example .env.production
 docker-compose up -d --build
 ```
 
-**详细文档：** 查看 [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md)
+**详细文档：** 查看 [Docker部署指南](./docs/deployment/DOCKER_DEPLOY.md)
 
 **常用命令：**
 ```bash
@@ -234,6 +234,25 @@ PAID → [卖家取消（自动退款）] → CANCELLED
 - 订单权限严格控制
 - SQL注入防护（Prisma ORM）
 - CSRF保护
+
+## 📚 文档导航
+
+### 快速开始
+- [快速开始指南](./docs/guides/QUICKSTART.md) - 5分钟快速部署指南
+- [验证指南](./docs/guides/VERIFICATION_GUIDE.md) - 功能测试和验证
+
+### API文档
+- [API接口文档](./docs/api/API.md) - 完整的API接口说明
+
+### 架构设计
+- [系统架构文档](./docs/architecture/ARCHITECTURE.md) - 技术架构和设计思路
+
+### 部署运维
+- [Docker部署指南](./docs/deployment/DOCKER_DEPLOY.md) - 使用Docker部署（推荐）
+- [GitHub Container部署](./docs/deployment/GITHUB_CONTAINER.md) - 使用GitHub Container Registry
+
+### 安全文档
+- [安全验证报告](./docs/security/SECURITY_VERIFICATION_REPORT.md) - 安全漏洞修复和验证
 
 ## 开发计划
 

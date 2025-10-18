@@ -1,19 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { comparePassword, generateToken } from '@/lib/auth'
+import { authLimiter, getClientIp, checkRateLimit } from '@/lib/ratelimit'
+import { loginSchema } from '@/lib/validations/auth'
 import { ApiResponse } from '@/types'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password } = await request.json()
+    // 安全修复: 请求限流 - 防止暴力破解（5次/分钟）
+    const ip = getClientIp(request)
+    const rateLimitResult = await checkRateLimit(authLimiter, `login:${ip}`)
+    if (!rateLimitResult.success) {
+      return rateLimitResult.response
+    }
 
-    // 验证必填字段
-    if (!email || !password) {
+    const body = await request.json()
+
+    // 安全修复: 输入验证 - 使用Zod统一验证
+    const validation = loginSchema.safeParse(body)
+    if (!validation.success) {
       return NextResponse.json<ApiResponse>({
         success: false,
-        error: '请输入邮箱和密码'
+        error: validation.error.errors[0].message
       }, { status: 400 })
     }
+
+    const { email, password } = validation.data
 
     // 查找用户
     const user = await prisma.user.findUnique({

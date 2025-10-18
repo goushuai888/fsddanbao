@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
 import { Menu, X, Home, LogOut } from 'lucide-react'
+import { setAuthToken, clearAuthToken } from '@/lib/cookies'
+import { Toaster, toast } from 'sonner'
 
 export default function AdminLayout({
   children,
@@ -23,13 +25,19 @@ export default function AdminLayout({
     const userData = localStorage.getItem('user')
 
     if (!token || !userData) {
-      router.push('/login')
+      router.push('/login?redirect=/admin')
       return
     }
 
+    // 安全修复：确保token也保存到Cookie（兼容旧用户）
+    // 如果用户是在代码更新前登录的，需要补充设置Cookie
+    setAuthToken(token)
+
     const parsedUser = JSON.parse(userData)
     if (parsedUser.role !== 'ADMIN') {
-      alert('无权访问管理后台')
+      toast.error('无权访问管理后台', {
+        description: '您需要管理员权限才能访问此页面'
+      })
       router.push('/')
       return
     }
@@ -39,8 +47,8 @@ export default function AdminLayout({
   }, [router])
 
   const handleLogout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    // 安全修复：同时清除localStorage和Cookie
+    clearAuthToken()
     router.push('/')
   }
 
@@ -54,6 +62,9 @@ export default function AdminLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Toast 通知 */}
+      <Toaster position="top-right" richColors />
+
       {/* 顶部导航栏 */}
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="flex items-center justify-between px-4 py-3">

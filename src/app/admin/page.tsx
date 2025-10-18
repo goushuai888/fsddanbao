@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { formatPrice } from '@/lib/utils'
+import { handleApiError } from '@/lib/error-handler'
 
 interface Stats {
   totalUsers: number
@@ -24,10 +26,17 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchStats()
+    // ✅ 内存泄漏防护: 使用AbortController取消未完成的请求
+    const controller = new AbortController()
+
+    fetchStats(controller.signal)
+
+    return () => {
+      controller.abort()
+    }
   }, [])
 
-  const fetchStats = async () => {
+  const fetchStats = async (signal?: AbortSignal) => {
     try {
       setLoading(true)
       const token = localStorage.getItem('token')
@@ -35,16 +44,30 @@ export default function AdminDashboard() {
       const response = await fetch('/api/admin/stats', {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        signal // 传递AbortSignal
       })
+
+      // ✅ 统一错误处理: 检查HTTP状态码
+      if (!response.ok) {
+        handleApiError(response, '获取统计数据')
+        return
+      }
 
       const data = await response.json()
 
       if (data.success) {
         setStats(data.data)
+      } else {
+        handleApiError(data, '获取统计数据')
       }
     } catch (error) {
+      // 忽略AbortError（组件卸载时的正常取消）
+      if (error instanceof Error && error.name === 'AbortError') {
+        return
+      }
       console.error('获取统计数据错误:', error)
+      handleApiError(error, '获取统计数据')
     } finally {
       setLoading(false)
     }
@@ -88,7 +111,7 @@ export default function AdminDashboard() {
     },
     {
       title: '平台总收益',
-      value: `¥${stats.totalRevenue.toFixed(2)}`,
+      value: formatPrice(Number(stats.totalRevenue)),
       description: '累计手续费收入',
       color: 'text-emerald-600',
       bgColor: 'bg-emerald-50'

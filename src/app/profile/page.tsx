@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { formatPrice } from '@/lib/utils'
 
 interface UserProfile {
   id: string
@@ -249,7 +250,7 @@ export default function ProfilePage() {
             <div className="flex justify-between items-center">
               <span className="text-gray-600">账户余额:</span>
               <div className="flex items-center gap-3">
-                <span className="font-medium text-lg">¥ {user?.balance.toFixed(2)}</span>
+                <span className="font-medium text-lg">{user?.balance && formatPrice(Number(user.balance))}</span>
                 <Link href="/withdrawals">
                   <Button size="sm" variant="outline">
                     提现

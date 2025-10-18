@@ -1,10 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatDate, formatPrice } from '@/lib/utils'
+import { sanitizeText } from '@/lib/sanitize'
+import { handleApiError } from '@/lib/error-handler'
+import { toast } from 'sonner'
+import { RefundActionSchema } from '@/lib/validations/admin'
 
 interface RefundRequest {
   id: string
@@ -47,11 +51,7 @@ export default function AdminRefundsPage() {
   const [actionType, setActionType] = useState<'approve' | 'reject'>('approve')
   const [actionLoading, setActionLoading] = useState(false)
 
-  useEffect(() => {
-    fetchRefunds()
-  }, [statusFilter])
-
-  const fetchRefunds = async () => {
+  const fetchRefunds = useCallback(async (signal?: AbortSignal) => {
     try {
       setLoading(true)
       const token = localStorage.getItem('token')
@@ -64,26 +64,62 @@ export default function AdminRefundsPage() {
       const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        signal // 传递AbortSignal
       })
+
+      // ✅ 统一错误处理: 检查HTTP状态码
+      if (!response.ok) {
+        handleApiError(response, '获取退款申请列表')
+        return
+      }
 
       const data = await response.json()
 
       if (data.success) {
         setRefunds(data.data || [])
       } else {
-        alert(data.error || '获取退款申请列表失败')
+        handleApiError(data, '获取退款申请列表')
       }
     } catch (error) {
+      // 忽略AbortError（组件卸载或快速切换筛选时的正常取消）
+      if (error instanceof Error && error.name === 'AbortError') {
+        return
+      }
       console.error('获取退款申请列表错误:', error)
-      alert('网络错误，请稍后重试')
+      handleApiError(error, '获取退款申请列表')
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter]) // 添加依赖
+
+  useEffect(() => {
+    // ✅ 内存泄漏防护: 使用AbortController取消未完成的请求
+    const controller = new AbortController()
+
+    fetchRefunds(controller.signal)
+
+    return () => {
+      controller.abort()
+    }
+  }, [fetchRefunds]) // 使用fetchRefunds作为依赖
 
   const handleAction = async () => {
     if (!selectedRefund) return
+
+    // ✅ 输入验证: 使用Zod schema验证表单数据
+    const validation = RefundActionSchema.safeParse({
+      action: actionType,
+      note
+    })
+
+    if (!validation.success) {
+      const errorMessage = validation.error.errors[0]?.message || '输入验证失败'
+      toast.error('输入错误', {
+        description: errorMessage
+      })
+      return
+    }
 
     try {
       setActionLoading(true)
@@ -95,26 +131,31 @@ export default function AdminRefundsPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          action: actionType,
-          note
-        })
+        body: JSON.stringify(validation.data)
       })
+
+      // ✅ 统一错误处理: 检查HTTP状态码
+      if (!response.ok) {
+        handleApiError(response, '处理退款申请')
+        return
+      }
 
       const data = await response.json()
 
       if (data.success) {
-        alert(data.message || '处理成功')
+        toast.success('处理成功', {
+          description: data.message || `已${actionType === 'approve' ? '同意' : '拒绝'}退款申请`
+        })
         setShowDialog(false)
         setSelectedRefund(null)
         setNote('')
         fetchRefunds()
       } else {
-        alert(data.error || '处理失败')
+        handleApiError(data, '处理退款申请')
       }
     } catch (error) {
       console.error('处理退款申请错误:', error)
-      alert('网络错误，请稍后重试')
+      handleApiError(error, '处理退款申请')
     } finally {
       setActionLoading(false)
     }
@@ -204,10 +245,11 @@ export default function AdminRefundsPage() {
                   <div>
                     <h4 className="text-sm font-medium text-gray-700 mb-1">卖家</h4>
                     <p className="text-sm text-gray-600">
-                      {refund.seller.name || '未命名'} ({refund.seller.email})
+                      {/* ✅ XSS防护: 清理用户输入数据 */}
+                      {sanitizeText(refund.seller.name) || '未命名'} ({sanitizeText(refund.seller.email)})
                     </p>
                     {refund.seller.phone && (
-                      <p className="text-xs text-gray-500">{refund.seller.phone}</p>
+                      <p className="text-xs text-gray-500">{sanitizeText(refund.seller.phone)}</p>
                     )}
                   </div>
 
@@ -217,10 +259,11 @@ export default function AdminRefundsPage() {
                     {refund.buyer ? (
                       <>
                         <p className="text-sm text-gray-600">
-                          {refund.buyer.name || '未命名'} ({refund.buyer.email})
+                          {/* ✅ XSS防护: 清理用户输入数据 */}
+                          {sanitizeText(refund.buyer.name) || '未命名'} ({sanitizeText(refund.buyer.email)})
                         </p>
                         {refund.buyer.phone && (
-                          <p className="text-xs text-gray-500">{refund.buyer.phone}</p>
+                          <p className="text-xs text-gray-500">{sanitizeText(refund.buyer.phone)}</p>
                         )}
                       </>
                     ) : (
@@ -234,7 +277,8 @@ export default function AdminRefundsPage() {
                   <div className="mb-4">
                     <h4 className="text-sm font-medium text-gray-700 mb-1">退款原因</h4>
                     <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
-                      {refund.refundReason}
+                      {/* ✅ XSS防护: 清理用户输入数据 */}
+                      {sanitizeText(refund.refundReason)}
                     </p>
                   </div>
                 )}
@@ -245,6 +289,7 @@ export default function AdminRefundsPage() {
                     <Button
                       onClick={() => openDialog(refund, 'approve')}
                       className="bg-green-600 hover:bg-green-700"
+                      disabled={actionLoading}
                     >
                       同意退款
                     </Button>
@@ -252,6 +297,7 @@ export default function AdminRefundsPage() {
                       onClick={() => openDialog(refund, 'reject')}
                       variant="outline"
                       className="border-red-300 text-red-600 hover:bg-red-50"
+                      disabled={actionLoading}
                     >
                       拒绝退款
                     </Button>
@@ -276,9 +322,30 @@ export default function AdminRefundsPage() {
 
       {/* 处理对话框 */}
       {showDialog && selectedRefund && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            // 点击背景关闭对话框
+            if (e.target === e.currentTarget) {
+              setShowDialog(false)
+              setSelectedRefund(null)
+              setNote('')
+            }
+          }}
+          onKeyDown={(e) => {
+            // ✅ 无障碍性: Esc键关闭对话框
+            if (e.key === 'Escape') {
+              setShowDialog(false)
+              setSelectedRefund(null)
+              setNote('')
+            }
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dialog-title"
+        >
           <div className="bg-white p-6 rounded-lg w-full max-w-md">
-            <h3 className="text-lg font-medium mb-4">
+            <h3 id="dialog-title" className="text-lg font-medium mb-4">
               {actionType === 'approve' ? '同意退款' : '拒绝退款'}
             </h3>
             <div className="mb-4">
@@ -290,19 +357,28 @@ export default function AdminRefundsPage() {
                   ? '同意退款后，订单将被取消，款项退还给买家'
                   : '拒绝退款后，订单将保持已支付状态'}
               </p>
-              <label className="block text-sm font-medium mb-2">备注（可选）</label>
+              <label htmlFor="refund-note" className="block text-sm font-medium mb-2">
+                备注（可选）
+              </label>
               <textarea
+                id="refund-note"
                 className="w-full border rounded-md p-2 min-h-[100px]"
                 placeholder="请填写处理说明..."
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
+                maxLength={500}
+                aria-describedby="note-char-count"
               />
+              <p id="note-char-count" className="text-xs text-gray-500 mt-1">
+                {note.length}/500 字符
+              </p>
             </div>
             <div className="flex gap-2">
               <Button
                 onClick={handleAction}
                 disabled={actionLoading}
                 className={actionType === 'approve' ? 'bg-green-600 hover:bg-green-700' : ''}
+                aria-label={actionType === 'approve' ? '确认同意退款' : '确认拒绝退款'}
               >
                 {actionLoading ? '处理中...' : '确认'}
               </Button>
@@ -313,6 +389,8 @@ export default function AdminRefundsPage() {
                   setNote('')
                 }}
                 variant="outline"
+                disabled={actionLoading}
+                aria-label="取消操作"
               >
                 取消
               </Button>

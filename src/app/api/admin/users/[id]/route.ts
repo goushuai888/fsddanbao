@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyToken } from '@/lib/auth'
+import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
 import { ApiResponse } from '@/types'
 
 // 获取用户详情（仅管理员）
@@ -150,6 +151,25 @@ export async function PATCH(
     const body = await request.json()
     const { name, phone, role, verified, balance } = body
 
+    // 获取更新前的用户信息（用于审计日志）
+    const oldUser = await prisma.user.findUnique({
+      where: { id: params.id },
+      select: {
+        name: true,
+        phone: true,
+        role: true,
+        verified: true,
+        balance: true
+      }
+    })
+
+    if (!oldUser) {
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: '用户不存在'
+      }, { status: 404 })
+    }
+
     // 构建更新数据
     const updateData: any = {}
 
@@ -173,6 +193,24 @@ export async function PATCH(
         createdAt: true,
         updatedAt: true
       }
+    })
+
+    // 记录审计日志
+    await logAudit({
+      userId: payload.userId,
+      action: balance !== undefined ? AUDIT_ACTIONS.UPDATE_USER_BALANCE : AUDIT_ACTIONS.UPDATE_USER_ROLE,
+      target: params.id,
+      targetType: 'User',
+      oldValue: oldUser,
+      newValue: {
+        name: user.name,
+        phone: user.phone,
+        role: user.role,
+        verified: user.verified,
+        balance: user.balance
+      },
+      description: '管理员更新用户信息',
+      req: request
     })
 
     return NextResponse.json<ApiResponse>({
@@ -220,6 +258,28 @@ export async function DELETE(
       }, { status: 403 })
     }
 
+    // 获取被删除用户的完整信息（用于审计日志）
+    const userToDelete = await prisma.user.findUnique({
+      where: { id: params.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        role: true,
+        verified: true,
+        balance: true,
+        createdAt: true
+      }
+    })
+
+    if (!userToDelete) {
+      return NextResponse.json<ApiResponse>({
+        success: false,
+        error: '用户不存在'
+      }, { status: 404 })
+    }
+
     // 检查用户是否有进行中的订单
     const activeOrders = await prisma.order.count({
       where: {
@@ -242,6 +302,17 @@ export async function DELETE(
 
     await prisma.user.delete({
       where: { id: params.id }
+    })
+
+    // 记录审计日志
+    await logAudit({
+      userId: payload.userId,
+      action: AUDIT_ACTIONS.DELETE_USER,
+      target: params.id,
+      targetType: 'User',
+      oldValue: userToDelete,
+      description: `删除用户 ${userToDelete.email}`,
+      req: request
     })
 
     return NextResponse.json<ApiResponse>({

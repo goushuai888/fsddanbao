@@ -1,291 +1,151 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatPrice, formatDate, maskString } from '@/lib/utils'
-
-interface Order {
-  id: string
-  orderNo: string
-  status: string
-  vehicleBrand: string
-  vehicleModel: string
-  vehicleYear: number
-  fsdVersion: string
-  price: number
-  createdAt: string
-  seller?: {
-    id: string
-    name: string
-    verified: boolean
-  }
-  buyer?: {
-    id: string
-    name: string
-    verified: boolean
-  }
-}
-
-const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  PUBLISHED: { label: '已发布', color: 'bg-blue-100 text-blue-800' },
-  PAID: { label: '已支付', color: 'bg-green-100 text-green-800' },
-  TRANSFERRING: { label: '转移中', color: 'bg-yellow-100 text-yellow-800' },
-  CONFIRMING: { label: '待确认', color: 'bg-orange-100 text-orange-800' },
-  COMPLETED: { label: '已完成', color: 'bg-gray-100 text-gray-800' },
-  CANCELLED: { label: '已取消', color: 'bg-red-100 text-red-800' },
-  DISPUTE: { label: '申诉中', color: 'bg-purple-100 text-purple-800' }
-}
+import { Navbar } from '@/components/layout/Navbar'
+import { OrderCard } from '@/components/orders/OrderCard'
+import { OrderFilters } from '@/components/orders/OrderFilters'
+import { EmptyState } from '@/components/orders/EmptyState'
+import { OrderListSkeleton } from '@/components/ui/skeleton'
+import { useAuth } from '@/hooks/useAuth'
+import { useOrders } from '@/hooks/useOrders'
+import { getViewConfig } from '@/lib/constants/order-views'
 
 export default function OrdersPage() {
-  const router = useRouter()
-  const [orders, setOrders] = useState<Order[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'all' | 'sell' | 'buy' | 'market'>('market')  // 默认显示市场订单
-  const [statusFilter, setStatusFilter] = useState<string>('active')  // 默认显示进行中的订单
-  const [user, setUser] = useState<any>(null)
+  // Authentication
+  const { user, isLoading: authLoading, logout } = useAuth(true)
 
-  useEffect(() => {
-    // 检查登录状态
-    const token = localStorage.getItem('token')
-    const userData = localStorage.getItem('user')
+  // Orders data and filters
+  const {
+    orders,
+    isLoading: ordersLoading,
+    filterType,
+    statusFilter,
+    setFilterType,
+    setStatusFilter
+  } = useOrders({
+    initialFilterType: 'market',  // 默认显示市场浏览
+    initialStatusFilter: 'all',  // 默认显示全部状态的订单
+    autoFetch: true
+  })
 
-    if (!token || !userData) {
-      // 保存当前路径，登录后返回
-      localStorage.setItem('redirectAfterLogin', '/orders')
-      alert('请先登录后再访问订单列表')
-      router.push('/login')
-      return
-    }
+  // 获取当前视图配置
+  const viewConfig = getViewConfig(filterType)
 
-    setUser(JSON.parse(userData))
-    fetchOrders(filter, statusFilter)
-  }, [filter, statusFilter, router])
-
-  const fetchOrders = async (type: string, status: string) => {
-    try {
-      setLoading(true)
-      const token = localStorage.getItem('token')
-
-      let url = '/api/orders'
-      const params = new URLSearchParams()
-      if (type !== 'all') params.append('type', type)
-      if (status !== 'all') params.append('status', status)
-      if (params.toString()) url += `?${params.toString()}`
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setOrders(data.data || [])
-      } else {
-        alert(data.error || '获取订单列表失败')
-      }
-    } catch (error) {
-      console.error('获取订单列表错误:', error)
-      alert('网络错误，请稍后重试')
-    } finally {
-      setLoading(false)
-    }
+  // 处理订单类型切换
+  const handleFilterTypeChange = (type: typeof filterType) => {
+    setFilterType(type)
+    // 根据视图配置自动切换默认状态
+    const newConfig = getViewConfig(type)
+    setStatusFilter(newConfig.defaultStatus)
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    router.push('/')
+  // Loading state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">加载中...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 导航栏 */}
-      <nav className="bg-white border-b">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold text-gray-900">
-            FSD担保交易平台
-          </Link>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">
-              欢迎，{user?.name || user?.email}
-              {user?.verified && <span className="ml-1 text-green-600">✓</span>}
-            </span>
-            {user?.role === 'ADMIN' && (
-              <Link href="/admin/users">
-                <Button variant="outline">用户管理</Button>
-              </Link>
-            )}
-            <Link href="/profile">
-              <Button variant="outline">个人中心</Button>
-            </Link>
-            <Link href="/orders">
-              <Button variant="outline">我的订单</Button>
-            </Link>
-            <Button onClick={handleLogout} variant="ghost">退出</Button>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Navigation */}
+      <Navbar user={user} onLogout={logout} />
 
-      {/* 主内容 */}
+      {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">订单管理</h1>
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              订单管理
+            </h1>
+            <p className="text-gray-600">
+              管理您的FSD权限转让订单
+            </p>
+          </div>
           <Link href="/orders/create">
-            <Button size="lg">发布FSD转让</Button>
+            <Button size="lg" className="shadow-md hover:shadow-lg transition-shadow">
+              <svg
+                className="w-5 h-5 mr-2"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              发布FSD转让
+            </Button>
           </Link>
         </div>
 
-        {/* 筛选器 */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>筛选订单</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-4 flex-wrap">
-              <div>
-                <label className="block text-sm font-medium mb-2">订单类型</label>
-                <div className="flex gap-2">
-                  <Button
-                    variant={filter === 'market' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFilter('market')}
-                  >
-                    市场浏览
-                  </Button>
-                  <Button
-                    variant={filter === 'all' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFilter('all')}
-                  >
-                    我的全部
-                  </Button>
-                  <Button
-                    variant={filter === 'sell' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFilter('sell')}
-                  >
-                    我卖出的
-                  </Button>
-                  <Button
-                    variant={filter === 'buy' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setFilter('buy')}
-                  >
-                    我买入的
-                  </Button>
-                </div>
-              </div>
+        {/* Filters */}
+        <div className="mb-6">
+          <OrderFilters
+            filterType={filterType}
+            statusFilter={statusFilter}
+            onFilterTypeChange={handleFilterTypeChange}
+            onStatusFilterChange={setStatusFilter}
+          />
+        </div>
 
+        {/* 市场浏览视觉提示 */}
+        {filterType === 'market' && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 text-green-700">
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
               <div>
-                <label className="block text-sm font-medium mb-2">订单状态</label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  disabled={filter === 'market'}
-                  className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="active">进行中</option>
-                  <option value="all">全部状态</option>
-                  <option value="PUBLISHED">已发布</option>
-                  <option value="PAID">已支付</option>
-                  <option value="TRANSFERRING">转移中</option>
-                  <option value="COMPLETED">已完成</option>
-                  <option value="CANCELLED">已取消</option>
-                </select>
-                {filter === 'market' && (
-                  <p className="text-xs text-gray-500 mt-1">市场只显示在售订单</p>
-                )}
+                <span className="font-medium">浏览在售订单</span>
+                <p className="text-sm text-green-600 mt-0.5">
+                  所有显示的订单均为可购买状态
+                </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        )}
 
-        {/* 订单列表 */}
-        {loading ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500">加载中...</p>
+        {/* Orders List */}
+        {ordersLoading ? (
+          <div className="mb-8">
+            <OrderListSkeleton count={6} />
           </div>
         ) : orders.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <p className="text-gray-500 mb-4">暂无订单</p>
-              <Link href="/orders/create">
-                <Button>发布第一个订单</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <EmptyState
+            title={viewConfig.emptyMessage}
+            description={viewConfig.emptyDescription}
+            actionLabel={filterType === 'market' || filterType === 'all' ? '发布第一个订单' : undefined}
+            actionHref={filterType === 'market' || filterType === 'all' ? '/orders/create' : undefined}
+          />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {orders.map((order) => (
-              <Card key={order.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <CardTitle className="text-lg">
-                      {order.vehicleBrand} {order.vehicleModel}
-                    </CardTitle>
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${STATUS_MAP[order.status]?.color}`}>
-                      {STATUS_MAP[order.status]?.label || order.status}
-                    </span>
-                  </div>
-                  <CardDescription>
-                    订单号: {maskString(order.orderNo, 6, 4)}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">年份:</span>
-                      <span className="font-medium">{order.vehicleYear}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">FSD版本:</span>
-                      <span className="font-medium">{order.fsdVersion}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">价格:</span>
-                      <span className="font-bold text-lg text-blue-600">
-                        {formatPrice(order.price)}
-                      </span>
-                    </div>
-                    {order.seller && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">卖家:</span>
-                        <span>
-                          {order.seller.name || '未命名'}
-                          {order.seller.verified && <span className="text-green-600 ml-1">✓</span>}
-                        </span>
-                      </div>
-                    )}
-                    {order.buyer && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">买家:</span>
-                        <span>
-                          {order.buyer.name || '未命名'}
-                          {order.buyer.verified && <span className="text-green-600 ml-1">✓</span>}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>发布时间:</span>
-                      <span>{formatDate(order.createdAt)}</span>
-                    </div>
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Link href={`/orders/${order.id}`} className="w-full">
-                    <Button variant="outline" className="w-full">
-                      查看详情
-                    </Button>
-                  </Link>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
+          <>
+            {/* Orders Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+              {orders.map((order) => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  hideStatus={viewConfig.hideStatus}  // 使用配置决定是否隐藏状态
+                />
+              ))}
+            </div>
+
+            {/* Results Summary */}
+            <div className="text-center text-sm text-gray-600">
+              共找到 <span className="font-semibold text-blue-600">{orders.length}</span> 个订单
+            </div>
+          </>
         )}
       </main>
     </div>

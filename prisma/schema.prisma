@@ -19,7 +19,7 @@ model User {
   avatar        String?
   role          Role      @default(BUYER)
   verified      Boolean   @default(false)  // 是否实名认证
-  balance       Float     @default(0)      // 账户余额
+  balance       Decimal   @default(0) @db.Decimal(10, 2)  // 账户余额
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -61,10 +61,10 @@ model Order {
   vin             String?     // 车架号(部分隐藏)
   fsdVersion      String      // FSD版本
 
-  // 价格信息
-  price           Float       // 售价
-  escrowAmount    Float?      // 实际担保金额
-  platformFee     Float?      // 平台手续费
+  // 价格信息（使用Decimal确保金额精度）
+  price           Decimal     @db.Decimal(10, 2)  // 售价，最大9999万，2位小数
+  escrowAmount    Decimal?    @db.Decimal(10, 2)  // 实际担保金额
+  platformFee     Decimal?    @db.Decimal(10, 2)  // 平台手续费
 
   // 转移凭证
   transferProof   String?     // 转移凭证图片/文件URL
@@ -75,8 +75,16 @@ model Order {
   refundReason    String?                      // 买家退款申请原因
   refundRequestedAt DateTime?                  // 退款申请时间
   refundStatus    RefundStatus?                // 退款申请状态
+  refundApprovedAt DateTime?                   // 同意退款时间
   refundRejectedReason String?                 // 卖家拒绝退款理由
   refundRejectedAt DateTime?                   // 拒绝退款时间
+
+  // ✅ 退款时间限制和延期
+  refundResponseDeadline DateTime?             // 卖家响应退款的截止时间
+  refundExtensionRequested Boolean @default(false) // 是否申请延期
+  refundExtensionReason String?                // 延期理由
+  refundExtensionGrantedAt DateTime?           // 延期批准时间
+  refundAutoApproved Boolean @default(false)   // 是否因超时自动同意退款
 
   // 时间戳
   createdAt       DateTime    @default(now())
@@ -123,7 +131,7 @@ model Payment {
   user            User          @relation(fields: [userId], references: [id])
 
   // 支付信息
-  amount          Float
+  amount          Decimal     @db.Decimal(10, 2)  // 支付金额
   type            PaymentType
   status          PaymentStatus @default(PENDING)
   paymentMethod   String?       // 支付方式(alipay/wechat/bank)
@@ -230,9 +238,9 @@ model Withdrawal {
   user            User              @relation(fields: [userId], references: [id])
 
   // 提现信息
-  amount          Float             // 提现金额
-  fee             Float             @default(0) // 提现手续费
-  actualAmount    Float             // 实际到账金额
+  amount          Decimal           @db.Decimal(10, 2)  // 提现金额
+  fee             Decimal           @default(0) @db.Decimal(10, 2)  // 提现手续费
+  actualAmount    Decimal           @db.Decimal(10, 2)  // 实际到账金额
 
   // 收款信息
   bankName        String?           // 银行名称

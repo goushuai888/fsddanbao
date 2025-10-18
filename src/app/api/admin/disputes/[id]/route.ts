@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyToken } from '@/lib/auth'
+import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
 import { ApiResponse } from '@/types'
 
 // 处理申诉
@@ -53,71 +54,152 @@ export async function PATCH(
     let updatedDispute
     let updatedOrder
 
+    // ✅ 修复Bug: 使用事务保证资金流转的原子性
     if (action === 'approve') {
       // 同意申诉 - 退款给买家
-      updatedDispute = await prisma.dispute.update({
-        where: { id: params.id },
-        data: {
-          status: 'RESOLVED',
-          resolution: resolution || '管理员同意申诉，订单已取消并退款给买家',
-          resolvedBy: payload.userId,
-          resolvedAt: new Date()
-        }
-      })
-
-      // 更新订单状态为已取消
-      updatedOrder = await prisma.order.update({
-        where: { id: dispute.orderId },
-        data: {
-          status: 'CANCELLED',
-          cancelledAt: new Date()
-        }
-      })
-
-      // 创建退款记录
-      if (dispute.order.buyerId) {
-        await prisma.payment.create({
+      const result = await prisma.$transaction(async (tx) => {
+        // 1. 更新申诉状态
+        const updatedDispute = await tx.dispute.update({
+          where: { id: params.id },
           data: {
-            orderId: dispute.order.id,
-            userId: dispute.order.buyerId,
-            amount: dispute.order.escrowAmount || dispute.order.price,
-            type: 'REFUND',
-            status: 'COMPLETED',
-            note: '申诉处理-退款给买家'
+            status: 'RESOLVED',
+            resolution: resolution || '管理员同意申诉，订单已取消并退款给买家',
+            resolvedBy: payload.userId,
+            resolvedAt: new Date()
           }
         })
-      }
+
+        // 2. 更新订单状态为已取消
+        const updatedOrder = await tx.order.update({
+          where: { id: dispute.orderId },
+          data: {
+            status: 'CANCELLED',
+            cancelledAt: new Date()
+          }
+        })
+
+        // 3. 退款给买家（创建退款记录 + 更新买家余额）
+        if (dispute.order.buyerId) {
+          const refundAmount = dispute.order.escrowAmount || dispute.order.price
+
+          await tx.payment.create({
+            data: {
+              orderId: dispute.order.id,
+              userId: dispute.order.buyerId,
+              amount: refundAmount,
+              type: 'REFUND',
+              status: 'COMPLETED',
+              note: '申诉处理-退款给买家'
+            }
+          })
+
+          // ✅ 修复: 更新买家余额
+          await tx.user.update({
+            where: { id: dispute.order.buyerId },
+            data: {
+              balance: {
+                increment: refundAmount
+              }
+            }
+          })
+        }
+
+        return { dispute: updatedDispute, order: updatedOrder }
+      })
+
+      updatedDispute = result.dispute
+      updatedOrder = result.order
+
+      // 记录审计日志
+      await logAudit({
+        userId: payload.userId,
+        action: AUDIT_ACTIONS.RESOLVE_DISPUTE,
+        target: params.id,
+        targetType: 'Dispute',
+        oldValue: {
+          disputeStatus: 'PENDING',
+          orderStatus: dispute.order.status
+        },
+        newValue: {
+          disputeStatus: 'RESOLVED',
+          orderStatus: 'CANCELLED',
+          resolution,
+          refundAmount: dispute.order.escrowAmount || dispute.order.price
+        },
+        description: `同意申诉并退款给买家`,
+        req: request
+      })
     } else if (action === 'reject') {
       // 拒绝申诉 - 款项释放给卖家，订单完成
-      updatedDispute = await prisma.dispute.update({
-        where: { id: params.id },
-        data: {
-          status: 'CLOSED',
-          resolution: resolution || '管理员拒绝申诉，认定交易正常完成',
-          resolvedBy: payload.userId,
-          resolvedAt: new Date()
-        }
+      const result = await prisma.$transaction(async (tx) => {
+        // 1. 更新申诉状态
+        const updatedDispute = await tx.dispute.update({
+          where: { id: params.id },
+          data: {
+            status: 'CLOSED',
+            resolution: resolution || '管理员拒绝申诉，认定交易正常完成',
+            resolvedBy: payload.userId,
+            resolvedAt: new Date()
+          }
+        })
+
+        // 2. 更新订单状态为已完成
+        const updatedOrder = await tx.order.update({
+          where: { id: dispute.orderId },
+          data: {
+            status: 'COMPLETED',
+            completedAt: new Date()
+          }
+        })
+
+        // 3. 释放款项给卖家（创建释放记录 + 更新卖家余额）
+        const releaseAmount = Number(dispute.order.price) - (Number(dispute.order.platformFee) || 0)
+
+        await tx.payment.create({
+          data: {
+            orderId: dispute.order.id,
+            userId: dispute.order.sellerId,
+            amount: releaseAmount,
+            type: 'RELEASE',
+            status: 'COMPLETED',
+            note: '申诉被拒-释放款项给卖家'
+          }
+        })
+
+        // ✅ 修复: 更新卖家余额
+        await tx.user.update({
+          where: { id: dispute.order.sellerId },
+          data: {
+            balance: {
+              increment: releaseAmount
+            }
+          }
+        })
+
+        return { dispute: updatedDispute, order: updatedOrder }
       })
 
-      // 更新订单状态为已完成
-      updatedOrder = await prisma.order.update({
-        where: { id: dispute.orderId },
-        data: {
-          status: 'COMPLETED',
-          completedAt: new Date()
-        }
-      })
+      updatedDispute = result.dispute
+      updatedOrder = result.order
 
-      // 释放款项给卖家
-      await prisma.payment.create({
-        data: {
-          orderId: dispute.order.id,
-          userId: dispute.order.sellerId,
-          amount: dispute.order.price - (dispute.order.platformFee || 0),
-          type: 'RELEASE',
-          status: 'COMPLETED',
-          note: '申诉被拒-释放款项给卖家'
-        }
+      // 记录审计日志
+      await logAudit({
+        userId: payload.userId,
+        action: AUDIT_ACTIONS.CLOSE_DISPUTE,
+        target: params.id,
+        targetType: 'Dispute',
+        oldValue: {
+          disputeStatus: 'PENDING',
+          orderStatus: dispute.order.status
+        },
+        newValue: {
+          disputeStatus: 'CLOSED',
+          orderStatus: 'COMPLETED',
+          resolution,
+          releaseAmount: Number(dispute.order.price) - (Number(dispute.order.platformFee) || 0)
+        },
+        description: `拒绝申诉并释放款项给卖家`,
+        req: request
       })
     } else {
       return NextResponse.json<ApiResponse>({

@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
       activeOrders,
       completedOrders,
       pendingDisputes,
-      totalRevenue: platformFeeSum._sum.platformFee || 0
+      totalRevenue: Number(platformFeeSum._sum.platformFee || 0)
     }
 
     return NextResponse.json<ApiResponse>({

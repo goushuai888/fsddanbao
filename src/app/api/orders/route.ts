@@ -13,10 +13,18 @@ export async function GET(request: NextRequest) {
 
     // 市场浏览模式不需要登录
     if (type === 'market') {
+      // 市场浏览支持状态筛选（未来扩展功能）
+      const marketWhere: any = {}
+
+      // 默认只显示在售订单，也支持其他状态（如未来需要）
+      if (status && status !== 'all' && status !== 'active') {
+        marketWhere.status = status
+      } else {
+        marketWhere.status = 'PUBLISHED'  // 默认在售
+      }
+
       const orders = await prisma.order.findMany({
-        where: {
-          status: 'PUBLISHED'
-        },
+        where: marketWhere,
         include: {
           seller: {
             select: {
@@ -241,11 +249,14 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
+    // 确保价格精度（四舍五入到2位小数）
+    const priceDecimal = Math.round(parseFloat(price) * 100) / 100
+
     // 生成订单号
     const orderNo = generateOrderNo()
 
     // 计算平台手续费
-    const platformFee = calculatePlatformFee(price)
+    const platformFee = calculatePlatformFee(priceDecimal)
 
     // 创建订单
     const order = await prisma.order.create({
@@ -257,7 +268,7 @@ export async function POST(request: NextRequest) {
         vehicleYear,
         vin,
         fsdVersion,
-        price,
+        price: priceDecimal,
         platformFee,
         status: 'PUBLISHED'
       },

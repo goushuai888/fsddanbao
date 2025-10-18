@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useState } from 'react'
+import { setAuthToken } from '@/lib/cookies'
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -29,8 +30,8 @@ export default function LoginPage() {
       const data = await response.json()
 
       if (data.success) {
-        // 保存token到localStorage
-        localStorage.setItem('token', data.data.token)
+        // 安全修复: 同时保存token到localStorage和Cookie（供中间件使用）
+        setAuthToken(data.data.token)
         localStorage.setItem('user', JSON.stringify(data.data.user))
 
         // 检查是否有之前保存的跳转路径

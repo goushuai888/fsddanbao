@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyToken } from '@/lib/auth'
+import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
 import { ApiResponse } from '@/types'
 
 // 处理退款申请
@@ -80,6 +81,24 @@ export async function PATCH(
           }
         })
       }
+
+      // 记录审计日志
+      await logAudit({
+        userId: payload.userId,
+        action: AUDIT_ACTIONS.APPROVE_REFUND,
+        target: params.id,
+        targetType: 'Order',
+        oldValue: {
+          refundStatus: 'PENDING',
+          orderStatus: order.status
+        },
+        newValue: {
+          refundStatus: 'APPROVED',
+          orderStatus: 'CANCELLED'
+        },
+        description: `批准退款申请`,
+        req: request
+      })
     } else if (action === 'reject') {
       // 拒绝退款 - 订单保持已支付状态
       updatedOrder = await prisma.order.update({
@@ -87,6 +106,24 @@ export async function PATCH(
         data: {
           refundStatus: 'REJECTED'
         }
+      })
+
+      // 记录审计日志
+      await logAudit({
+        userId: payload.userId,
+        action: AUDIT_ACTIONS.REJECT_REFUND,
+        target: params.id,
+        targetType: 'Order',
+        oldValue: {
+          refundStatus: 'PENDING',
+          orderStatus: order.status
+        },
+        newValue: {
+          refundStatus: 'REJECTED',
+          orderStatus: order.status
+        },
+        description: `拒绝退款申请`,
+        req: request
       })
     } else {
       return NextResponse.json<ApiResponse>({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { verifyToken } from '@/lib/auth'
+import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
 import { ApiResponse } from '@/types'
 
 // 审核提现申请
@@ -84,6 +85,22 @@ export async function PATCH(
         }
       })
 
+      // 记录审计日志
+      await logAudit({
+        userId: payload.userId,
+        action: AUDIT_ACTIONS.APPROVE_WITHDRAWAL,
+        target: id,
+        targetType: 'Withdrawal',
+        oldValue: { status: 'PENDING' },
+        newValue: {
+          status: 'APPROVED',
+          amount: withdrawal.amount,
+          reviewNote
+        },
+        description: `批准提现申请，金额: ${withdrawal.amount}`,
+        req: request
+      })
+
       return NextResponse.json<ApiResponse>({
         success: true,
         message: '已批准提现申请'
@@ -120,6 +137,21 @@ export async function PATCH(
         })
       ])
 
+      // 记录审计日志
+      await logAudit({
+        userId: payload.userId,
+        action: AUDIT_ACTIONS.REJECT_WITHDRAWAL,
+        target: id,
+        targetType: 'Withdrawal',
+        oldValue: { status: 'PENDING' },
+        newValue: {
+          status: 'REJECTED',
+          rejectReason
+        },
+        description: `拒绝提现申请: ${rejectReason}`,
+        req: request
+      })
+
       return NextResponse.json<ApiResponse>({
         success: true,
         message: '已拒绝提现申请，用户余额已恢复'
@@ -155,6 +187,21 @@ export async function PATCH(
         }
       })
 
+      // 记录审计日志
+      await logAudit({
+        userId: payload.userId,
+        action: AUDIT_ACTIONS.COMPLETE_WITHDRAWAL,
+        target: id,
+        targetType: 'Withdrawal',
+        oldValue: { status: withdrawal.status },
+        newValue: {
+          status: 'COMPLETED',
+          transactionId
+        },
+        description: `完成提现，交易ID: ${transactionId}`,
+        req: request
+      })
+
       return NextResponse.json<ApiResponse>({
         success: true,
         message: '提现已完成'
@@ -178,6 +225,21 @@ export async function PATCH(
           }
         })
       ])
+
+      // 记录审计日志
+      await logAudit({
+        userId: payload.userId,
+        action: AUDIT_ACTIONS.FAIL_WITHDRAWAL,
+        target: id,
+        targetType: 'Withdrawal',
+        oldValue: { status: withdrawal.status },
+        newValue: {
+          status: 'FAILED',
+          reviewNote
+        },
+        description: `提现失败，已恢复用户余额`,
+        req: request
+      })
 
       return NextResponse.json<ApiResponse>({
         success: true,

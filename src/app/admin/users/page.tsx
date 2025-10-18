@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { formatDate } from '@/lib/utils'
+import { formatDate, formatPrice } from '@/lib/utils'
+import { sanitizeText } from '@/lib/sanitize'
 
 interface User {
   id: string
@@ -185,11 +186,11 @@ export default function AdminUsersPage() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
                       <div className="text-sm font-medium text-gray-900">
-                        {u.name || '未命名'}
+                        {sanitizeText(u.name || '未命名')}
                       </div>
-                      <div className="text-sm text-gray-500">{u.email}</div>
+                      <div className="text-sm text-gray-500">{sanitizeText(u.email)}</div>
                       {u.phone && (
-                        <div className="text-xs text-gray-400">{u.phone}</div>
+                        <div className="text-xs text-gray-400">{sanitizeText(u.phone)}</div>
                       )}
                     </div>
                   </td>
@@ -212,7 +213,7 @@ export default function AdminUsersPage() {
                     <div>买入: {u._count.buyOrders}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    ¥{u.balance.toFixed(2)}
+                    {formatPrice(Number(u.balance))}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatDate(u.createdAt)}

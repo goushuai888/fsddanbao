@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
         revenueByPeriod[key] = { revenue: 0, orders: 0 }
       }
 
-      revenueByPeriod[key].revenue += order.platformFee || 0
+      revenueByPeriod[key].revenue += Number(order.platformFee || 0)
       revenueByPeriod[key].orders += 1
     })
 
@@ -132,9 +132,9 @@ export async function GET(request: NextRequest) {
     })
 
     const stats = {
-      totalRevenue: totalRevenue._sum.platformFee || 0,
+      totalRevenue: Number(totalRevenue._sum.platformFee || 0),
       totalOrders,
-      avgOrderValue: avgOrderValue._avg.price || 0,
+      avgOrderValue: Number(avgOrderValue._avg.price || 0),
       trendData,
       ordersByStatus: ordersByStatus.map(item => ({
         status: item.status,

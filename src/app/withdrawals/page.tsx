@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { formatDate, formatPrice } from '@/lib/utils'
+import { ArrowLeft } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -226,6 +227,18 @@ export default function WithdrawalsPage() {
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="max-w-6xl mx-auto">
+        {/* 返回按钮行 */}
+        <div className="mb-4">
+          <Button
+            variant="ghost"
+            onClick={() => router.back()}
+            className="gap-2 hover:bg-gray-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>返回</span>
+          </Button>
+        </div>
+
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">我的提现</h1>
