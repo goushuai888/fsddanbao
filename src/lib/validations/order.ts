@@ -84,7 +84,8 @@ export const orderActionSchema = z.discriminatedUnion('action', [
   // 创建申诉
   z.object({
     action: z.literal('create_dispute'),
-    reason: z.string().min(10, '申诉原因至少10个字').max(1000, '申诉原因最多1000字')
+    reason: z.string().min(5, '申诉原因至少5个字').max(200, '申诉原因最多200字').optional(),
+    description: z.string().min(10, '申诉详情至少10个字').max(1000, '申诉详情最多1000字')
   })
 ])
 
