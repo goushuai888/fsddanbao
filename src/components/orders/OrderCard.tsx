@@ -9,29 +9,22 @@ import {
   CardTitle
 } from '@/components/ui/card'
 import { formatPrice, formatDate, maskString } from '@/lib/utils'
+import { getUserRoleInOrder, getOrderStatusDisplay, OrderStatus } from '@/constants/order-status'
 import type { Order } from '@/hooks/useOrders'
-
-const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  PUBLISHED: { label: '已发布', color: 'bg-blue-100 text-blue-800' },
-  PAID: { label: '已支付', color: 'bg-green-100 text-green-800' },
-  TRANSFERRING: { label: '转移中', color: 'bg-yellow-100 text-yellow-800' },
-  CONFIRMING: { label: '待确认', color: 'bg-orange-100 text-orange-800' },
-  COMPLETED: { label: '已完成', color: 'bg-gray-100 text-gray-800' },
-  CANCELLED: { label: '已取消', color: 'bg-red-100 text-red-800' },
-  DISPUTE: { label: '申诉中', color: 'bg-purple-100 text-purple-800' }
-}
 
 export interface OrderCardProps {
   order: Order
+  currentUserId?: string  // 当前用户ID，用于计算角色
   className?: string
   hideStatus?: boolean  // 是否隐藏状态标签（市场浏览时使用）
 }
 
-export function OrderCard({ order, className = '', hideStatus = false }: OrderCardProps) {
-  const statusInfo = STATUS_MAP[order.status] || {
-    label: order.status,
-    color: 'bg-gray-100 text-gray-800'
-  }
+export function OrderCard({ order, currentUserId, className = '', hideStatus = false }: OrderCardProps) {
+  // 计算用户角色
+  const userRole = getUserRoleInOrder(order, currentUserId)
+
+  // 获取状态显示信息
+  const statusInfo = getOrderStatusDisplay(order.status as OrderStatus, userRole, order.refundRequested || false)
 
   return (
     <Card className={`hover:shadow-lg transition-all duration-200 ${className}`}>
@@ -42,7 +35,7 @@ export function OrderCard({ order, className = '', hideStatus = false }: OrderCa
           </CardTitle>
           {!hideStatus && (
             <span
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${statusInfo.color}`}
+              className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusInfo.color} ${statusInfo.bgColor}`}
             >
               {statusInfo.label}
             </span>

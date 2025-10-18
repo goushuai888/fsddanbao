@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 
+// 扩展订单类型以包含列表中需要的字段
 export interface Order {
   id: string
   orderNo: string
@@ -11,6 +12,9 @@ export interface Order {
   fsdVersion: string
   price: number
   createdAt: string
+  sellerId: string  // 添加 sellerId
+  buyerId: string | null  // 添加 buyerId
+  refundRequested: boolean  // 添加 refundRequested
   seller?: {
     id: string
     name: string

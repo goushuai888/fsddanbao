@@ -76,6 +76,11 @@ export const orderActionSchema = z.discriminatedUnion('action', [
     action: z.literal('reject_refund'),
     reason: z.string().min(5, '拒绝理由至少5个字').max(500, '拒绝理由最多500字')
   }),
+  // 申请退款延期
+  z.object({
+    action: z.literal('request_refund_extension'),
+    reason: z.string().min(5, '延期理由至少5个字').max(500, '延期理由最多500字')
+  }),
   // 创建申诉
   z.object({
     action: z.literal('create_dispute'),

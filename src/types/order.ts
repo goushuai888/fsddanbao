@@ -28,8 +28,14 @@ export interface Order {
   refundApprovedAt: string | null
   refundRejectedReason: string | null
   refundRejectedAt: string | null
+  refundResponseDeadline: string | null  // 退款响应截止时间
+  refundExtensionRequested: boolean      // 是否申请延期
+  refundExtensionReason: string | null   // 延期理由
+  refundExtensionGrantedAt: string | null  // 延期批准时间
   seller: UserInfo
+  sellerId: string  // 添加 sellerId 字段
   buyer: UserInfo | null
+  buyerId: string | null  // 添加 buyerId 字段
   payments?: Payment[]
   disputes?: Dispute[]
 }
@@ -86,6 +92,7 @@ export type OrderAction =
   | 'request_refund'
   | 'approve_refund'
   | 'reject_refund'
+  | 'request_refund_extension'  // 添加延期申请操作
   | 'create_dispute'
 
 export interface TimelineEvent {

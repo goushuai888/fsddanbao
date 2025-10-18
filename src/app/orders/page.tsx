@@ -136,6 +136,7 @@ export default function OrdersPage() {
                 <OrderCard
                   key={order.id}
                   order={order}
+                  currentUserId={user?.id}  // 传递当前用户ID以计算角色
                   hideStatus={viewConfig.hideStatus}  // 使用配置决定是否隐藏状态
                 />
               ))}

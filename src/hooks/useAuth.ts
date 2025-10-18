@@ -9,6 +9,7 @@ interface User {
   name: string | null
   role: string
   verified: boolean
+  balance?: number  // 添加 balance 字段（可选，因为某些API可能不返回）
 }
 
 interface UseAuthReturn {

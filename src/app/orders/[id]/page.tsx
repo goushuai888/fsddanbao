@@ -37,6 +37,7 @@ import { OrderTimelineService } from '@/services/orderTimelineService'
 // 类型和常量
 import { sanitizeText } from '@/lib/sanitize'
 import { isSafeUrl, getUrlValidationError } from '@/lib/url-validator'
+import { getUserRoleInOrder } from '@/constants/order-status'
 
 export default function OrderDetailPage() {
   const router = useRouter()
@@ -102,6 +103,7 @@ export default function OrderDetailPage() {
   // 权限判断
   const isSeller = user?.id === order.seller.id
   const isBuyer = order.buyer && user?.id === order.buyer.id
+  const userRole = getUserRoleInOrder(order, user?.id)
 
   // 生成时间线
   const timelineEvents = OrderTimelineService.generateTimeline(order)
@@ -193,7 +195,12 @@ export default function OrderDetailPage() {
 
           {/* 订单状态 */}
           <div className="mb-6">
-            <OrderStatusCard orderNo={order.orderNo} status={order.status} />
+            <OrderStatusCard
+              orderNo={order.orderNo}
+              status={order.status}
+              userRole={userRole}
+              hasRefundRequest={order.refundRequested}
+            />
           </div>
 
           {/* 信息卡片 */}
