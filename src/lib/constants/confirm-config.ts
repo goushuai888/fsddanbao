@@ -122,7 +122,7 @@ export function getConfirmRemainingSeconds(confirmDeadline: Date | string | null
 }
 
 /**
- * 格式化确认剩余时间
+ * 格式化确认剩余时间（始终显示秒数，便于观察动态倒计时）
  * @param seconds 剩余秒数
  * @returns 格式化的时间字符串
  */
@@ -136,8 +136,9 @@ export function formatConfirmRemaining(seconds: number): string {
   const minutes = Math.floor((seconds % 3600) / 60)
   const secs = seconds % 60
 
+  // ✅ 始终显示秒数，让用户看到倒计时在动态变化
   if (days > 0) {
-    return `${days}天${hours}小时${minutes}分钟`
+    return `${days}天${hours}小时${minutes}分钟${secs}秒`
   }
   if (hours > 0) {
     return `${hours}小时${minutes}分钟${secs}秒`
