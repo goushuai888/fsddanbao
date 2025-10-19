@@ -25,6 +25,8 @@ import { OrderVehicleInfo, OrderPriceInfo, OrderUserInfo } from '@/components/or
 import { OrderTimeline } from '@/components/orders/OrderTimeline'
 import { RefundDialog, RejectRefundDialog, DisputeDialog } from '@/components/orders/dialogs'
 import { RefundCountdown } from '@/components/orders/RefundCountdown'
+import { QiniuImageUpload } from '@/components/upload/QiniuImageUpload'
+import { Navbar } from '@/components/layout/Navbar'
 
 // Hooks
 import { useAuth } from '@/hooks/useAuth'
@@ -32,12 +34,13 @@ import { useOrderDetail } from '@/hooks/orders/useOrderDetail'
 import { useOrderActions } from '@/hooks/orders/useOrderActions'
 
 // 服务
-import { OrderTimelineService } from '@/services/orderTimelineService'
+import { OrderTimelineService } from '@/lib/services/timeline/timeline-service'
 
 // 类型和常量
-import { sanitizeText } from '@/lib/sanitize'
-import { isSafeUrl, getUrlValidationError } from '@/lib/url-validator'
-import { getUserRoleInOrder } from '@/constants/order-status'
+import { sanitizeText } from '@/lib/infrastructure/security/sanitize'
+import { isSafeUrl, getUrlValidationError } from '@/lib/utils/validators/url-validator'
+import { getUserRoleInOrder } from '@/lib/domain/policies/order-status'
+import { formatPrice, maskString } from '@/lib/utils/helpers/common'
 
 export default function OrderDetailPage() {
   const router = useRouter()
@@ -45,7 +48,7 @@ export default function OrderDetailPage() {
   const orderId = params.id as string
 
   // 认证
-  const { user, isLoading: authLoading } = useAuth()
+  const { user, isLoading: authLoading, logout } = useAuth()
 
   // 订单数据
   const { order, loading: orderLoading, refetch } = useOrderDetail(orderId)
@@ -64,6 +67,42 @@ export default function OrderDetailPage() {
   const [showDisputeDialog, setShowDisputeDialog] = useState(false)
   const [showExtensionDialog, setShowExtensionDialog] = useState(false)
   const [extensionReason, setExtensionReason] = useState('')
+
+  // 图片放大查看状态
+  const [showImageModal, setShowImageModal] = useState(false)
+  const [modalImageUrl, setModalImageUrl] = useState('')
+
+  // 打开图片放大查看
+  const handleImageClick = (url: string) => {
+    setModalImageUrl(url)
+    setShowImageModal(true)
+  }
+
+  // 关闭图片放大查看
+  const handleCloseImageModal = () => {
+    setShowImageModal(false)
+    setModalImageUrl('')
+  }
+
+  // ESC键关闭Modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showImageModal) {
+        handleCloseImageModal()
+      }
+    }
+
+    if (showImageModal) {
+      document.addEventListener('keydown', handleKeyDown)
+      // 禁止背景滚动
+      document.body.style.overflow = 'hidden'
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = 'unset'
+    }
+  }, [showImageModal])
 
   // 权限检查
   useEffect(() => {
@@ -111,15 +150,7 @@ export default function OrderDetailPage() {
   // 处理转移操作
   const handleTransfer = () => {
     if (!transferProof || !transferNote) {
-      alert('请填写转移凭证和说明')
-      return
-    }
-
-    // 验证URL安全性
-    if (!isSafeUrl(transferProof)) {
-      const errorMsg = getUrlValidationError(transferProof) || '无效的URL'
-      setTransferProofError(errorMsg)
-      alert(errorMsg)
+      alert('请上传转移凭证图片并填写说明')
       return
     }
 
@@ -157,32 +188,13 @@ export default function OrderDetailPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* 导航栏 */}
-      <nav className="bg-white border-b">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold text-gray-900">
-            FSD担保交易平台
-          </Link>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">
-              欢迎，{user?.name || user?.email}
-            </span>
-            {user?.role === 'ADMIN' && (
-              <Link href="/admin">
-                <Button variant="outline">管理后台</Button>
-              </Link>
-            )}
-            <Link href="/orders">
-              <Button variant="outline">我的订单</Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <Navbar user={user} onLogout={logout} />
 
       {/* 主内容 */}
       <main className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           {/* 返回按钮 */}
-          <div className="mb-4">
+          <div className="mb-6">
             <Button
               variant="ghost"
               onClick={() => router.back()}
@@ -193,66 +205,214 @@ export default function OrderDetailPage() {
             </Button>
           </div>
 
-          {/* 订单状态 */}
-          <div className="mb-6">
-            <OrderStatusCard
-              orderNo={order.orderNo}
-              status={order.status}
-              userRole={userRole}
-              hasRefundRequest={order.refundRequested}
-              confirmDeadline={order.confirmDeadline}
-              autoConfirmed={order.autoConfirmed}
-              onConfirmTimeout={() => {
-                console.warn('确认收货期限已到，刷新订单数据')
-                refetch()
-              }}
-            />
-          </div>
+          {/* 左右分栏布局 */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* 左侧主内容区 (2/3宽度) */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* 订单状态 */}
+              <OrderStatusCard
+                orderNo={order.orderNo}
+                status={order.status}
+                userRole={userRole}
+                hasRefundRequest={order.refundRequested}
+                confirmDeadline={order.confirmDeadline}
+                autoConfirmed={order.autoConfirmed}
+                onConfirmTimeout={() => {
+                  console.info('确认收货期限已到，刷新订单数据')
+                  refetch()
+                }}
+              />
 
-          {/* 信息卡片 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <OrderVehicleInfo order={order} />
-            <OrderPriceInfo order={order} />
-            <OrderUserInfo title="卖家信息" user={order.seller} />
-            {order.buyer && <OrderUserInfo title="买家信息" user={order.buyer} />}
-          </div>
-
-          {/* 时间线 */}
-          <div className="mb-6">
-            <OrderTimeline events={timelineEvents} />
-          </div>
-
-          {/* 转移凭证 */}
-          {order.transferProof && (() => {
-            const isValidUrl = isSafeUrl(order.transferProof)
-            return (
-              <Card className="mb-6">
+              {/* 订单详情（整合车辆+价格信息） */}
+              <Card>
                 <CardHeader>
-                  <CardTitle>转移凭证</CardTitle>
+                  <CardTitle>订单详情</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-gray-600 mb-2">转移说明：{order.transferNote}</p>
-                  {isValidUrl ? (
-                    <a
-                      href={order.transferProof}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline text-sm"
-                    >
-                      查看转移凭证 →
-                    </a>
-                  ) : (
-                    <p className="text-sm text-red-600">
-                      ⚠️ 转移凭证链接无效或不安全
-                    </p>
-                  )}
+                <CardContent className="space-y-4">
+                  {/* 车辆信息 */}
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-gray-900">车辆信息</h4>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      <div className="text-gray-600">品牌型号：</div>
+                      <div className="font-medium">{order.vehicleBrand} {order.vehicleModel}</div>
+                      <div className="text-gray-600">年份：</div>
+                      <div className="font-medium">{order.vehicleYear}</div>
+                      {order.vin && (
+                        <>
+                          <div className="text-gray-600">车架号：</div>
+                          <div className="font-mono text-xs">{maskString(order.vin, 5, 4)}</div>
+                        </>
+                      )}
+                      <div className="text-gray-600">FSD版本：</div>
+                      <div className="font-medium">{order.fsdVersion}</div>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4" />
+
+                  {/* 价格信息 */}
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-gray-900">价格信息</h4>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                      <div className="text-gray-600">转让价格：</div>
+                      <div className="font-bold text-lg text-blue-600">{formatPrice(order.price)}</div>
+                      {order.platformFee && (
+                        <>
+                          <div className="text-gray-600">平台手续费：</div>
+                          <div className="text-red-600">{formatPrice(order.platformFee)}</div>
+                        </>
+                      )}
+                      {order.escrowAmount && (
+                        <>
+                          <div className="text-gray-600">托管金额：</div>
+                          <div className="font-medium">{formatPrice(order.escrowAmount)}</div>
+                        </>
+                      )}
+                      {order.sellerAmount && (
+                        <>
+                          <div className="text-gray-600">卖家实收：</div>
+                          <div className="font-medium text-green-600">{formatPrice(order.sellerAmount)}</div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-            )
-          })()}
 
-          {/* 操作区域 */}
-          {renderActions()}
+              {/* 转移凭证 */}
+              {order.transferProof && (() => {
+                // ✅ 将不可访问的S3域名替换为可访问的测试域名（同时修改协议为HTTP）
+                let safeProofUrl = order.transferProof
+
+                // 如果是S3域名，替换为测试域名并改为HTTP协议
+                if (safeProofUrl.includes('fsddanbao.s3.ap-southeast-1.qiniucs.com')) {
+                  safeProofUrl = safeProofUrl.replace(
+                    'https://fsddanbao.s3.ap-southeast-1.qiniucs.com',
+                    'http://t4dm35k4k.sabkt.gdipper.com'
+                  )
+                }
+
+                const isValidUrl = isSafeUrl(safeProofUrl)
+
+                return (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>转移凭证</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-gray-600 mb-3">转移说明：{order.transferNote}</p>
+                      {isValidUrl ? (
+                        <div className="space-y-3">
+                          {/* 图片预览 - 点击可放大 */}
+                          <div
+                            className="border rounded-lg overflow-hidden bg-gray-50 cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => handleImageClick(safeProofUrl)}
+                            title="点击查看大图"
+                          >
+                            <img
+                              src={safeProofUrl}
+                              alt="转移凭证"
+                              className="max-w-full h-auto max-h-96 mx-auto"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement
+                                target.style.display = 'none'
+                                const errorDiv = target.nextElementSibling as HTMLElement
+                                if (errorDiv) errorDiv.style.display = 'block'
+                              }}
+                            />
+                            <div
+                              style={{ display: 'none' }}
+                              className="p-4 text-center text-sm text-red-600"
+                            >
+                              图片加载失败，请点击下方链接查看
+                            </div>
+                          </div>
+                          <a
+                            href={safeProofUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center text-blue-600 hover:underline text-sm"
+                          >
+                            在新标签页中打开 →
+                          </a>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-red-600">
+                          ⚠️ 转移凭证链接无效或不安全
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })()}
+
+              {/* 时间线 */}
+              <OrderTimeline events={timelineEvents} />
+            </div>
+
+            {/* 右侧操作栏 (1/3宽度, sticky固定) */}
+            <div className="lg:col-span-1">
+              <div className="sticky top-6 space-y-6">
+                {/* 交易双方信息 */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>交易双方</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* 卖家信息 */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-500" />
+                        <h4 className="font-medium text-gray-900">卖家</h4>
+                      </div>
+                      <div className="pl-4 space-y-1 text-sm">
+                        <p className="text-gray-600">
+                          用户名：<span className="font-medium text-gray-900">{order.seller.name}</span>
+                        </p>
+                        <p className="text-gray-600">
+                          邮箱：<span className="text-gray-900">{order.seller.email}</span>
+                        </p>
+                        {order.seller.phone && (
+                          <p className="text-gray-600">
+                            电话：<span className="text-gray-900">{order.seller.phone}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {order.buyer && (
+                      <>
+                        <div className="border-t" />
+                        {/* 买家信息 */}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-green-500" />
+                            <h4 className="font-medium text-gray-900">买家</h4>
+                          </div>
+                          <div className="pl-4 space-y-1 text-sm">
+                            <p className="text-gray-600">
+                              用户名：<span className="font-medium text-gray-900">{order.buyer.name}</span>
+                            </p>
+                            <p className="text-gray-600">
+                              邮箱：<span className="text-gray-900">{order.buyer.email}</span>
+                            </p>
+                            {order.buyer.phone && (
+                              <p className="text-gray-600">
+                                电话：<span className="text-gray-900">{order.buyer.phone}</span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 操作区域 */}
+                {renderActions()}
+              </div>
+            </div>
+          </div>
         </div>
       </main>
 
@@ -278,6 +438,50 @@ export default function OrderDetailPage() {
         loading={actionLoading}
         isPaidRefundRejected={order.status === 'PAID' && order.refundStatus === 'REJECTED'}
       />
+
+      {/* 图片放大查看Modal */}
+      {showImageModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 p-4"
+          onClick={handleCloseImageModal}
+        >
+          <div className="relative max-w-7xl max-h-screen">
+            {/* 关闭按钮 */}
+            <button
+              onClick={handleCloseImageModal}
+              className="absolute top-4 right-4 z-10 text-white hover:text-gray-300 transition-colors"
+              aria-label="关闭"
+            >
+              <svg
+                className="w-8 h-8"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+
+            {/* 大图显示 */}
+            <img
+              src={modalImageUrl}
+              alt="转移凭证大图"
+              className="max-w-full max-h-screen object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+
+            {/* 提示文字 */}
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black bg-opacity-50 px-4 py-2 rounded">
+              点击背景或按 ESC 键关闭
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 
@@ -318,31 +522,22 @@ export default function OrderDetailPage() {
               </p>
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  转移凭证URL <span className="text-red-500">*</span>
+                  转移凭证图片 <span className="text-red-500">*</span>
                 </label>
-                <Input
-                  type="url"
-                  placeholder="请输入转移凭证图片链接（支持AWS S3、阿里云OSS等）"
-                  value={transferProof}
-                  onChange={(e) => {
-                    const url = e.target.value
+                <QiniuImageUpload
+                  onUploadSuccess={(url) => {
                     setTransferProof(url)
-                    // 实时验证
-                    if (url.trim()) {
-                      const error = getUrlValidationError(url)
-                      setTransferProofError(error)
-                    } else {
-                      setTransferProofError(null)
-                    }
+                    setTransferProofError(null)
                   }}
-                  className={transferProofError ? 'border-red-500' : ''}
+                  maxSize={10 * 1024 * 1024}
+                  className="mb-2"
                 />
-                {transferProofError && (
-                  <p className="text-sm text-red-600 mt-1">⚠️ {transferProofError}</p>
+                {transferProof && (
+                  <p className="text-sm text-green-600 mt-1">✓ 图片已上传</p>
                 )}
-                {transferProof && !transferProofError && (
-                  <p className="text-sm text-green-600 mt-1">✓ URL格式正确</p>
-                )}
+                <p className="text-xs text-gray-500 mt-2">
+                  请上传转移凭证截图（FSD转移记录、Tesla App截图等）
+                </p>
               </div>
               <div>
                 <div className="flex justify-between items-center mb-2">
@@ -366,7 +561,7 @@ export default function OrderDetailPage() {
               </div>
               <Button
                 onClick={handleTransfer}
-                disabled={actionLoading || !!transferProofError}
+                disabled={actionLoading || !transferProof || !transferNote}
                 size="lg"
                 className="w-full"
               >
@@ -425,8 +620,8 @@ export default function OrderDetailPage() {
                   isExtended={order.refundExtensionRequested}
                   extensionReason={order.refundExtensionReason || undefined}
                   onTimeout={() => {
-                    // 超时后刷新订单数据
-                    console.warn('退款申请已超时，刷新订单数据')
+                    // ✅ 修复日志级别：这是正常操作，不是警告
+                    console.info('退款申请已超时，刷新订单数据')
                     refetch()
                   }}
                 />

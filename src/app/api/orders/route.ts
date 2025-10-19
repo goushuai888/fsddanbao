@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
-import { generateOrderNo, calculatePlatformFee } from '@/lib/utils'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { verifyToken } from '@/lib/infrastructure/auth/jwt'
+import { generateOrderNo } from '@/lib/utils/helpers/common'
+import { calculatePlatformFee } from '@/lib/domain/policies/business-rules'
 import { ApiResponse } from '@/types'
 
 // 获取订单列表

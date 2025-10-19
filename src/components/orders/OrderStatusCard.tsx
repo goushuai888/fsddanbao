@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { getOrderStatusDisplay, UserRole, OrderStatus as OrderStatusType } from '@/constants/order-status'
-import { getConfirmRemainingSeconds, formatConfirmRemaining } from '@/lib/constants/confirm-config'
+import { getOrderStatusDisplay, UserRole, OrderStatus as OrderStatusType } from '@/lib/domain/policies/order-status'
+import { getConfirmRemainingSeconds, formatConfirmRemaining } from '@/lib/domain/policies/confirm-config'
 
 interface OrderStatusCardProps {
   orderNo: string
@@ -33,22 +33,43 @@ export function OrderStatusCard({
   )
   const [hasCalledTimeout, setHasCalledTimeout] = useState(false)
 
+  // ✅ 使用 useRef 存储回调，避免依赖变化导致timer重建
+  const timeoutCallbackRef = useRef(onConfirmTimeout)
+
+  // 每次回调变化时更新 ref
+  useEffect(() => {
+    timeoutCallbackRef.current = onConfirmTimeout
+  }, [onConfirmTimeout])
+
   // 倒计时更新
   useEffect(() => {
     if (!confirmDeadline) return
 
     const timer = setInterval(() => {
-      const seconds = getConfirmRemainingSeconds(confirmDeadline)
-      setRemainingSeconds(seconds)
+      try {
+        const seconds = getConfirmRemainingSeconds(confirmDeadline)
+        setRemainingSeconds(seconds)
 
-      if (seconds <= 0 && !hasCalledTimeout && onConfirmTimeout) {
-        setHasCalledTimeout(true)
-        onConfirmTimeout()
+        if (seconds <= 0 && !hasCalledTimeout) {
+          setHasCalledTimeout(true)
+          // 使用 ref 中的最新回调
+          if (timeoutCallbackRef.current) {
+            try {
+              timeoutCallbackRef.current()
+            } catch (callbackError) {
+              console.error('确认超时回调执行失败:', callbackError)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('倒计时更新失败:', error)
+        // 发生错误时停止倒计时
+        clearInterval(timer)
       }
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [confirmDeadline, hasCalledTimeout, onConfirmTimeout])
+  }, [confirmDeadline, hasCalledTimeout]) // ✅ 移除 onConfirmTimeout 依赖
 
   const showCountdown = status === 'TRANSFERRING' && confirmDeadline
   const isOverdue = remainingSeconds <= 0

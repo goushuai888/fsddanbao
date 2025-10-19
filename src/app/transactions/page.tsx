@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Navbar } from '@/components/layout/Navbar'
 import { useAuth } from '@/hooks/useAuth'
-import { formatDate, formatPrice } from '@/lib/utils'
-import { sanitizeText } from '@/lib/sanitize'
+import { formatDate, formatPrice } from '@/lib/utils/helpers/common'
+import { sanitizeText } from '@/lib/infrastructure/security/sanitize'
 
 interface Transaction {
   id: string

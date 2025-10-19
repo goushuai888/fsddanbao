@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { formatDate, formatPrice } from '@/lib/utils'
-import { sanitizeText } from '@/lib/sanitize'
+import { Card, CardContent } from '@/components/ui/card'
+import { formatDate, formatPrice } from '@/lib/utils/helpers/common'
+import { sanitizeText } from '@/lib/infrastructure/security/sanitize'
+import { AdminFilters, FilterField } from '@/components/admin/AdminFilters'
+import { useApiData } from '@/hooks/useApiData'
 
 interface User {
   id: string
@@ -31,53 +32,49 @@ const ROLE_MAP: Record<string, { label: string; color: string }> = {
 }
 
 export default function AdminUsersPage() {
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
-  const [roleFilter, setRoleFilter] = useState('all')
-  const [verifiedFilter, setVerifiedFilter] = useState('all')
-  const [searchQuery, setSearchQuery] = useState('')
+  // 筛选状态
+  const [filters, setFilters] = useState({
+    role: 'all',
+    verified: 'all',
+    search: ''
+  })
 
-  useEffect(() => {
-    fetchUsers()
-  }, [roleFilter, verifiedFilter, searchQuery])
+  // 使用通用数据获取 Hook
+  const { data: users, loading } = useApiData<User>({
+    url: '/api/admin/users',
+    params: filters
+  })
 
-  const fetchUsers = async () => {
-    try {
-      setLoading(true)
-      const token = localStorage.getItem('token')
-
-      let url = '/api/admin/users'
-      const params = new URLSearchParams()
-      if (roleFilter !== 'all') params.append('role', roleFilter)
-      if (verifiedFilter !== 'all') params.append('verified', verifiedFilter)
-      if (searchQuery) params.append('search', searchQuery)
-      if (params.toString()) url += `?${params.toString()}`
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setUsers(data.data || [])
-      } else {
-        alert(data.error || '获取用户列表失败')
-      }
-    } catch (error) {
-      console.error('获取用户列表错误:', error)
-      alert('网络错误，请稍后重试')
-    } finally {
-      setLoading(false)
+  // 筛选字段配置
+  const filterFields: FilterField[] = [
+    {
+      name: 'role',
+      label: '用户角色',
+      type: 'select',
+      options: [
+        { label: '全部角色', value: 'all' },
+        { label: '买家', value: 'BUYER' },
+        { label: '卖家', value: 'SELLER' },
+        { label: '管理员', value: 'ADMIN' }
+      ]
+    },
+    {
+      name: 'verified',
+      label: '认证状态',
+      type: 'select',
+      options: [
+        { label: '全部状态', value: 'all' },
+        { label: '已认证', value: 'true' },
+        { label: '未认证', value: 'false' }
+      ]
+    },
+    {
+      name: 'search',
+      label: '搜索用户',
+      type: 'text',
+      placeholder: '邮箱、姓名或手机号'
     }
-  }
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    fetchUsers()
-  }
+  ]
 
   return (
     <div>
@@ -88,58 +85,14 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {/* 筛选和搜索 */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>筛选用户</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* 角色筛选 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">用户角色</label>
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">全部角色</option>
-                <option value="BUYER">买家</option>
-                <option value="SELLER">卖家</option>
-                <option value="ADMIN">管理员</option>
-              </select>
-            </div>
-
-            {/* 认证状态筛选 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">认证状态</label>
-              <select
-                value={verifiedFilter}
-                onChange={(e) => setVerifiedFilter(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">全部状态</option>
-                <option value="true">已认证</option>
-                <option value="false">未认证</option>
-              </select>
-            </div>
-
-            {/* 搜索 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">搜索用户</label>
-              <form onSubmit={handleSearch} className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="邮箱、姓名或手机号"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-                <Button type="submit">搜索</Button>
-              </form>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* 使用通用筛选组件 */}
+      <AdminFilters
+        title="筛选用户"
+        fields={filterFields}
+        values={filters}
+        onChange={setFilters}
+        className="mb-6"
+      />
 
       {/* 用户列表 */}
       {loading ? (

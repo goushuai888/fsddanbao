@@ -1,4 +1,4 @@
-import { FormDialog } from './FormDialog'
+import { FormDialog } from '@/components/admin/FormDialog'
 
 interface RefundDialogProps {
   isOpen: boolean
@@ -10,14 +10,17 @@ interface RefundDialogProps {
 export function RefundDialog({ isOpen, onClose, onSubmit, loading }: RefundDialogProps) {
   return (
     <FormDialog
-      isOpen={isOpen}
-      onClose={onClose}
+      open={isOpen}
+      onOpenChange={onClose}
       title="申请退款"
-      placeholder="请说明退款原因..."
-      submitText="提交申请"
-      onSubmit={onSubmit}
       loading={loading}
-      minLength={5}
+      simpleMode={{
+        enabled: true,
+        placeholder: "请说明退款原因...",
+        minLength: 5,
+        submitText: "提交申请",
+        onSubmit
+      }}
     />
   )
 }
@@ -32,16 +35,19 @@ interface RejectRefundDialogProps {
 export function RejectRefundDialog({ isOpen, onClose, onSubmit, loading }: RejectRefundDialogProps) {
   return (
     <FormDialog
-      isOpen={isOpen}
-      onClose={onClose}
+      open={isOpen}
+      onOpenChange={onClose}
       title="拒绝退款"
-      placeholder="请说明拒绝退款的理由...&#10;例如：&#10;- 买家已收到FSD权限&#10;- 转移凭证有效&#10;- 其他原因..."
-      submitText="确认拒绝"
-      onSubmit={onSubmit}
       loading={loading}
-      minLength={5}
-      variant="destructive"
-      warningMessage="请务必填写拒绝理由，这将记录在订单时间线中"
+      simpleMode={{
+        enabled: true,
+        placeholder: "请说明拒绝退款的理由...\n例如：\n- 买家已收到FSD权限\n- 转移凭证有效\n- 其他原因...",
+        minLength: 5,
+        submitText: "确认拒绝",
+        variant: "destructive",
+        warningMessage: "请务必填写拒绝理由，这将记录在订单时间线中",
+        onSubmit
+      }}
     />
   )
 }
@@ -73,16 +79,19 @@ export function DisputeDialog({
 
   return (
     <FormDialog
-      isOpen={isOpen}
-      onClose={onClose}
+      open={isOpen}
+      onOpenChange={onClose}
       title={title}
-      placeholder={placeholder}
-      submitText="提交申诉"
-      onSubmit={onSubmit}
       loading={loading}
-      minLength={10}
-      variant="destructive"
-      warningMessage={warningBase + (warningExtra ? " " + warningExtra : "")}
+      simpleMode={{
+        enabled: true,
+        placeholder,
+        minLength: 10,
+        submitText: "提交申诉",
+        variant: "destructive",
+        warningMessage: warningBase + (warningExtra ? " " + warningExtra : ""),
+        onSubmit
+      }}
     />
   )
 }

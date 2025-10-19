@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { formatDate, formatPrice } from '@/lib/utils'
+import { Card, CardContent } from '@/components/ui/card'
+import { formatDate, formatPrice } from '@/lib/utils/helpers/common'
+import { AdminFilters, FilterField } from '@/components/admin/AdminFilters'
+import { useApiData } from '@/hooks/useApiData'
 
 interface Order {
   id: string
@@ -58,55 +59,51 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 }
 
 export default function AdminOrdersPage() {
-  const [orders, setOrders] = useState<Order[]>([])
-  const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  // 筛选状态
+  const [filters, setFilters] = useState({
+    status: 'all',
+    search: '',
+    startDate: '',
+    endDate: ''
+  })
 
-  useEffect(() => {
-    fetchOrders()
-  }, [statusFilter, searchQuery, startDate, endDate])
+  // 使用通用数据获取 Hook
+  const { data: orders, loading } = useApiData<Order>({
+    url: '/api/admin/orders',
+    params: filters
+  })
 
-  const fetchOrders = async () => {
-    try {
-      setLoading(true)
-      const token = localStorage.getItem('token')
-
-      let url = '/api/admin/orders'
-      const params = new URLSearchParams()
-      if (statusFilter !== 'all') params.append('status', statusFilter)
-      if (searchQuery) params.append('search', searchQuery)
-      if (startDate) params.append('startDate', startDate)
-      if (endDate) params.append('endDate', endDate)
-      if (params.toString()) url += `?${params.toString()}`
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setOrders(data.data || [])
-      } else {
-        alert(data.error || '获取订单列表失败')
-      }
-    } catch (error) {
-      console.error('获取订单列表错误:', error)
-      alert('网络错误，请稍后重试')
-    } finally {
-      setLoading(false)
+  // 筛选字段配置
+  const filterFields: FilterField[] = [
+    {
+      name: 'status',
+      label: '订单状态',
+      type: 'select',
+      options: [
+        { label: '全部状态', value: 'all' },
+        { label: '草稿', value: 'DRAFT' },
+        { label: '已发布', value: 'PUBLISHED' },
+        { label: '已支付', value: 'PAID' },
+        { label: '转移中', value: 'TRANSFERRING' },
+        { label: '已完成', value: 'COMPLETED' },
+        { label: '已取消', value: 'CANCELLED' },
+        { label: '申诉中', value: 'DISPUTE' }
+      ]
+    },
+    {
+      name: 'search',
+      label: '搜索',
+      type: 'text',
+      placeholder: '订单号/用户邮箱/车辆信息'
+    },
+    {
+      name: 'dateRange',
+      label: '日期范围',
+      type: 'dateRange',
+      startDateName: 'startDate',
+      endDateName: 'endDate'
     }
-  }
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    fetchOrders()
-  }
+  ]
 
   return (
     <div>
@@ -117,65 +114,14 @@ export default function AdminOrdersPage() {
         </div>
       </div>
 
-      {/* 筛选和搜索 */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>筛选订单</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* 状态筛选 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">订单状态</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">全部状态</option>
-                <option value="DRAFT">草稿</option>
-                <option value="PUBLISHED">已发布</option>
-                <option value="PAID">已支付</option>
-                <option value="TRANSFERRING">转移中</option>
-                <option value="COMPLETED">已完成</option>
-                <option value="CANCELLED">已取消</option>
-                <option value="DISPUTE">申诉中</option>
-              </select>
-            </div>
-
-            {/* 搜索 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">搜索</label>
-              <Input
-                type="text"
-                placeholder="订单号/用户邮箱/车辆信息"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            {/* 开始日期 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">开始日期</label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-
-            {/* 结束日期 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">结束日期</label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* 使用通用筛选组件 */}
+      <AdminFilters
+        title="筛选订单"
+        fields={filterFields}
+        values={filters}
+        onChange={setFilters}
+        className="mb-6"
+      />
 
       {/* 订单列表 */}
       {loading ? (

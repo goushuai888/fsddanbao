@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/orders/EmptyState'
 import { OrderListSkeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/hooks/useAuth'
 import { useOrders } from '@/hooks/useOrders'
-import { getViewConfig } from '@/lib/constants/order-views'
+import { getViewConfig } from '@/lib/domain/policies/order-views'
 
 export default function OrdersPage() {
   // Authentication
@@ -38,6 +38,13 @@ export default function OrdersPage() {
     // 根据视图配置自动切换默认状态
     const newConfig = getViewConfig(type)
     setStatusFilter(newConfig.defaultStatus)
+    // ✅ 状态自动保存到 localStorage（在 useOrders hook 中）
+  }
+
+  // 处理状态筛选切换
+  const handleStatusFilterChange = (status: typeof statusFilter) => {
+    setStatusFilter(status)
+    // ✅ 状态自动保存到 localStorage（在 useOrders hook 中）
   }
 
   // Loading state
@@ -95,7 +102,7 @@ export default function OrdersPage() {
             filterType={filterType}
             statusFilter={statusFilter}
             onFilterTypeChange={handleFilterTypeChange}
-            onStatusFilterChange={setStatusFilter}
+            onStatusFilterChange={handleStatusFilterChange}
           />
         </div>
 

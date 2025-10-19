@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { TimelineEvent } from '@/types/order'
-import { formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils/helpers/common'
 
 interface OrderTimelineProps {
   events: TimelineEvent[]

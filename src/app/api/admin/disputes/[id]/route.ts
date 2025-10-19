@@ -1,32 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
-import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
+/**
+ * 管理员申诉处理API（使用统一认证中间件）
+ */
+
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { adminOnly } from '@/lib/infrastructure/middleware/auth'
+import { logAudit, AUDIT_ACTIONS } from '@/lib/infrastructure/audit/audit-logger'
 import { ApiResponse } from '@/types'
 
-// 处理申诉
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+/**
+ * PATCH /api/admin/disputes/[id] - 处理申诉
+ *
+ * 认证要求: 管理员权限
+ * 操作类型:
+ * - approve: 同意申诉（退款给买家）
+ * - reject: 拒绝申诉（释放款项给卖家）
+ */
+export const PATCH = adminOnly(async (request, { params }, auth) => {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '未授权'
-      }, { status: 401 })
-    }
-
-    const payload = verifyToken(token)
-    if (!payload || payload.role !== 'ADMIN') {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '无权访问'
-      }, { status: 403 })
-    }
-
     const body = await request.json()
     const { action, resolution } = body
 
@@ -64,7 +55,7 @@ export async function PATCH(
           data: {
             status: 'RESOLVED',
             resolution: resolution || '管理员同意申诉，订单已取消并退款给买家',
-            resolvedBy: payload.userId,
+            resolvedBy: auth.userId,
             resolvedAt: new Date()
           }
         })
@@ -112,7 +103,7 @@ export async function PATCH(
 
       // 记录审计日志
       await logAudit({
-        userId: payload.userId,
+        userId: auth.userId,
         action: AUDIT_ACTIONS.RESOLVE_DISPUTE,
         target: params.id,
         targetType: 'Dispute',
@@ -138,7 +129,7 @@ export async function PATCH(
           data: {
             status: 'CLOSED',
             resolution: resolution || '管理员拒绝申诉，认定交易正常完成',
-            resolvedBy: payload.userId,
+            resolvedBy: auth.userId,
             resolvedAt: new Date()
           }
         })
@@ -184,7 +175,7 @@ export async function PATCH(
 
       // 记录审计日志
       await logAudit({
-        userId: payload.userId,
+        userId: auth.userId,
         action: AUDIT_ACTIONS.CLOSE_DISPUTE,
         target: params.id,
         targetType: 'Dispute',
@@ -220,4 +211,4 @@ export async function PATCH(
       error: '服务器错误'
     }, { status: 500 })
   }
-}
+})

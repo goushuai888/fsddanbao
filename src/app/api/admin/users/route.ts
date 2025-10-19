@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { verifyToken } from '@/lib/infrastructure/auth/jwt'
 import { ApiResponse } from '@/types'
 
 // 获取用户列表（仅管理员）
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
 
     // 构建查询条件
-    let where: any = {}
+    const where: any = {}
 
     if (role && role !== 'all') {
       where.role = role

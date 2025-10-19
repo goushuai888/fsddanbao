@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatPrice } from '@/lib/utils'
-import { handleApiError } from '@/lib/error-handler'
+import { formatPrice } from '@/lib/utils/helpers/common'
+import { handleApiError } from '@/lib/utils/helpers/error-handler'
 
 interface Stats {
   totalUsers: number

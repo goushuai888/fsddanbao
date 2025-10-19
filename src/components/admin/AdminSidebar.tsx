@@ -2,8 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { cn } from '@/lib/utils'
-import { adminMenuConfig, type MenuGroup } from '@/lib/admin-menu'
+import { cn } from '@/lib/utils/helpers/common'
+import { adminMenuConfig, type MenuGroup } from '@/lib/config/admin-menu'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState, useEffect } from 'react'
 

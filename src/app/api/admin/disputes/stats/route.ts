@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { verifyToken } from '@/lib/infrastructure/auth/jwt'
 import { ApiResponse } from '@/types'
 
 // 获取申诉统计数据（用于通知）

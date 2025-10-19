@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
-import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { verifyToken } from '@/lib/infrastructure/auth/jwt'
+import { logAudit, AUDIT_ACTIONS } from '@/lib/infrastructure/audit/audit-logger'
 import { ApiResponse } from '@/types'
 
 // 处理退款申请

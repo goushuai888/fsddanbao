@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { getConfirmRemainingSeconds, formatConfirmRemaining } from '@/lib/constants/confirm-config'
+import { getConfirmRemainingSeconds, formatConfirmRemaining } from '@/lib/domain/policies/confirm-config'
 
 interface ConfirmCountdownProps {
   deadline: string | Date

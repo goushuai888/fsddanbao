@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { formatDate, formatPrice } from '@/lib/utils'
+import { Card, CardContent } from '@/components/ui/card'
+import { formatDate, formatPrice } from '@/lib/utils/helpers/common'
+import { sanitizeText } from '@/lib/infrastructure/security/sanitize'
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { AdminFilters, FilterField } from '@/components/admin/AdminFilters'
+import { useApiData } from '@/hooks/useApiData'
 
 interface Withdrawal {
   id: string
@@ -59,12 +62,13 @@ const METHOD_MAP: Record<string, string> = {
 }
 
 export default function AdminWithdrawalsPage() {
-  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([])
-  const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  // 筛选状态
+  const [filters, setFilters] = useState({
+    status: 'all',
+    search: '',
+    startDate: '',
+    endDate: ''
+  })
 
   // 审核对话框状态
   const [reviewDialog, setReviewDialog] = useState(false)
@@ -74,43 +78,11 @@ export default function AdminWithdrawalsPage() {
   const [transactionId, setTransactionId] = useState('')
   const [processing, setProcessing] = useState(false)
 
-  useEffect(() => {
-    fetchWithdrawals()
-  }, [statusFilter, searchQuery, startDate, endDate])
-
-  const fetchWithdrawals = async () => {
-    try {
-      setLoading(true)
-      const token = localStorage.getItem('token')
-
-      let url = '/api/admin/withdrawals'
-      const params = new URLSearchParams()
-      if (statusFilter !== 'all') params.append('status', statusFilter)
-      if (searchQuery) params.append('search', searchQuery)
-      if (startDate) params.append('startDate', startDate)
-      if (endDate) params.append('endDate', endDate)
-      if (params.toString()) url += `?${params.toString()}`
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setWithdrawals(data.data || [])
-      } else {
-        alert(data.error || '获取提现申请失败')
-      }
-    } catch (error) {
-      console.error('获取提现申请错误:', error)
-      alert('网络错误，请稍后重试')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // 使用通用数据获取 Hook
+  const { data: withdrawals, loading, refetch } = useApiData<Withdrawal>({
+    url: '/api/admin/withdrawals',
+    params: filters
+  })
 
   const handleReview = async (action: string) => {
     if (!selectedWithdrawal) return
@@ -150,7 +122,7 @@ export default function AdminWithdrawalsPage() {
         setReviewNote('')
         setRejectReason('')
         setTransactionId('')
-        fetchWithdrawals()
+        refetch()  // ✅ 使用 refetch 刷新数据
       } else {
         alert(data.error || '操作失败')
       }
@@ -182,6 +154,37 @@ export default function AdminWithdrawalsPage() {
     }, 0)
   }
 
+  // 筛选字段配置
+  const filterFields: FilterField[] = [
+    {
+      name: 'status',
+      label: '申请状态',
+      type: 'select',
+      options: [
+        { label: '全部状态', value: 'all' },
+        { label: '待审核', value: 'PENDING' },
+        { label: '已批准', value: 'APPROVED' },
+        { label: '处理中', value: 'PROCESSING' },
+        { label: '已完成', value: 'COMPLETED' },
+        { label: '已拒绝', value: 'REJECTED' },
+        { label: '失败', value: 'FAILED' }
+      ]
+    },
+    {
+      name: 'search',
+      label: '搜索',
+      type: 'text',
+      placeholder: '用户邮箱/交易ID'
+    },
+    {
+      name: 'dateRange',
+      label: '日期范围',
+      type: 'dateRange',
+      startDateName: 'startDate',
+      endDateName: 'endDate'
+    }
+  ]
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -191,64 +194,14 @@ export default function AdminWithdrawalsPage() {
         </div>
       </div>
 
-      {/* 筛选和搜索 */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>筛选提现申请</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* 状态筛选 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">申请状态</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">全部状态</option>
-                <option value="PENDING">待审核</option>
-                <option value="APPROVED">已批准</option>
-                <option value="PROCESSING">处理中</option>
-                <option value="COMPLETED">已完成</option>
-                <option value="REJECTED">已拒绝</option>
-                <option value="FAILED">失败</option>
-              </select>
-            </div>
-
-            {/* 搜索 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">搜索</label>
-              <Input
-                type="text"
-                placeholder="用户邮箱/交易ID"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            {/* 开始日期 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">开始日期</label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-
-            {/* 结束日期 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">结束日期</label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* 使用通用筛选组件 */}
+      <AdminFilters
+        title="筛选提现申请"
+        fields={filterFields}
+        values={filters}
+        onChange={setFilters}
+        className="mb-6"
+      />
 
       {/* 统计卡片 */}
       {!loading && withdrawals.length > 0 && (
@@ -332,9 +285,10 @@ export default function AdminWithdrawalsPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
-                      {withdrawal.user.name || '未命名'}
+                      {/* ✅ XSS防护: 清理用户输入数据 */}
+                      {sanitizeText(withdrawal.user.name) || '未命名'}
                     </div>
-                    <div className="text-xs text-gray-500">{withdrawal.user.email}</div>
+                    <div className="text-xs text-gray-500">{sanitizeText(withdrawal.user.email)}</div>
                     <div className="text-xs text-gray-500">
                       余额: {formatPrice(withdrawal.user.balance)}
                     </div>
@@ -356,19 +310,22 @@ export default function AdminWithdrawalsPage() {
                     </div>
                     {withdrawal.withdrawMethod === 'bank' && (
                       <div className="text-xs text-gray-500">
-                        <div>{withdrawal.bankName}</div>
-                        <div>{withdrawal.bankAccount}</div>
-                        <div>{withdrawal.accountName}</div>
+                        {/* ✅ XSS防护: 清理用户输入数据 */}
+                        <div>{sanitizeText(withdrawal.bankName)}</div>
+                        <div>{sanitizeText(withdrawal.bankAccount)}</div>
+                        <div>{sanitizeText(withdrawal.accountName)}</div>
                       </div>
                     )}
                     {withdrawal.withdrawMethod === 'alipay' && (
                       <div className="text-xs text-gray-500">
-                        {withdrawal.alipayAccount}
+                        {/* ✅ XSS防护: 清理用户输入数据 */}
+                        {sanitizeText(withdrawal.alipayAccount)}
                       </div>
                     )}
                     {withdrawal.withdrawMethod === 'wechat' && (
                       <div className="text-xs text-gray-500">
-                        {withdrawal.wechatAccount}
+                        {/* ✅ XSS防护: 清理用户输入数据 */}
+                        {sanitizeText(withdrawal.wechatAccount)}
                       </div>
                     )}
                   </td>
@@ -378,7 +335,8 @@ export default function AdminWithdrawalsPage() {
                     </span>
                     {withdrawal.rejectReason && (
                       <div className="text-xs text-red-600 mt-1">
-                        {withdrawal.rejectReason}
+                        {/* ✅ XSS防护: 清理用户输入数据 */}
+                        {sanitizeText(withdrawal.rejectReason)}
                       </div>
                     )}
                   </td>
@@ -443,9 +401,10 @@ export default function AdminWithdrawalsPage() {
               <div className="border rounded-lg p-4">
                 <h3 className="font-medium mb-2">用户信息</h3>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>姓名: {selectedWithdrawal.user.name || '未命名'}</div>
-                  <div>邮箱: {selectedWithdrawal.user.email}</div>
-                  <div>电话: {selectedWithdrawal.user.phone || '未设置'}</div>
+                  {/* ✅ XSS防护: 清理用户输入数据 */}
+                  <div>姓名: {sanitizeText(selectedWithdrawal.user.name) || '未命名'}</div>
+                  <div>邮箱: {sanitizeText(selectedWithdrawal.user.email)}</div>
+                  <div>电话: {sanitizeText(selectedWithdrawal.user.phone) || '未设置'}</div>
                   <div>余额: {formatPrice(selectedWithdrawal.user.balance)}</div>
                 </div>
               </div>
@@ -471,16 +430,17 @@ export default function AdminWithdrawalsPage() {
                 <div className="text-sm space-y-1">
                   {selectedWithdrawal.withdrawMethod === 'bank' && (
                     <>
-                      <div>银行: {selectedWithdrawal.bankName}</div>
-                      <div>账号: {selectedWithdrawal.bankAccount}</div>
-                      <div>户名: {selectedWithdrawal.accountName}</div>
+                      {/* ✅ XSS防护: 清理用户输入数据 */}
+                      <div>银行: {sanitizeText(selectedWithdrawal.bankName)}</div>
+                      <div>账号: {sanitizeText(selectedWithdrawal.bankAccount)}</div>
+                      <div>户名: {sanitizeText(selectedWithdrawal.accountName)}</div>
                     </>
                   )}
                   {selectedWithdrawal.withdrawMethod === 'alipay' && (
-                    <div>支付宝: {selectedWithdrawal.alipayAccount}</div>
+                    <div>支付宝: {sanitizeText(selectedWithdrawal.alipayAccount)}</div>
                   )}
                   {selectedWithdrawal.withdrawMethod === 'wechat' && (
-                    <div>微信: {selectedWithdrawal.wechatAccount}</div>
+                    <div>微信: {sanitizeText(selectedWithdrawal.wechatAccount)}</div>
                   )}
                 </div>
               </div>
@@ -608,7 +568,8 @@ export default function AdminWithdrawalsPage() {
                           <span className="font-medium text-green-900">交易ID</span>
                         </div>
                         <div className="text-green-800 font-mono text-base">
-                          {selectedWithdrawal.transactionId}
+                          {/* ✅ XSS防护: 清理用户输入数据 */}
+                          {sanitizeText(selectedWithdrawal.transactionId)}
                         </div>
                       </div>
                     )}
@@ -617,7 +578,10 @@ export default function AdminWithdrawalsPage() {
                     {selectedWithdrawal.status === 'REJECTED' && selectedWithdrawal.rejectReason && (
                       <div className="bg-red-50 border border-red-200 rounded p-3">
                         <div className="font-medium text-red-900 mb-1">拒绝原因</div>
-                        <div className="text-red-800">{selectedWithdrawal.rejectReason}</div>
+                        <div className="text-red-800">
+                          {/* ✅ XSS防护: 清理用户输入数据 */}
+                          {sanitizeText(selectedWithdrawal.rejectReason)}
+                        </div>
                       </div>
                     )}
 
@@ -625,7 +589,10 @@ export default function AdminWithdrawalsPage() {
                     {selectedWithdrawal.reviewNote && (
                       <div className="bg-gray-50 border border-gray-200 rounded p-3">
                         <div className="font-medium text-gray-900 mb-1">审核备注</div>
-                        <div className="text-gray-700">{selectedWithdrawal.reviewNote}</div>
+                        <div className="text-gray-700">
+                          {/* ✅ XSS防护: 清理用户输入数据 */}
+                          {sanitizeText(selectedWithdrawal.reviewNote)}
+                        </div>
                       </div>
                     )}
 

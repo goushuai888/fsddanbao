@@ -1,31 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
+/**
+ * 提现申请API（使用统一认证中间件）
+ */
+
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { withAuth } from '@/lib/infrastructure/middleware/auth'
 import { ApiResponse } from '@/types'
 
-// 获取用户的提现申请列表
-export async function GET(request: NextRequest) {
+/**
+ * GET /api/withdrawals - 获取用户的提现申请列表
+ *
+ * 认证要求: 已登录用户
+ */
+export const GET = withAuth(async (request, context, auth) => {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '未授权'
-      }, { status: 401 })
-    }
-
-    const payload = verifyToken(token)
-    if (!payload) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '无效的token'
-      }, { status: 401 })
-    }
-
     const withdrawals = await prisma.withdrawal.findMany({
       where: {
-        userId: payload.userId
+        userId: auth.userId
       },
       orderBy: {
         createdAt: 'desc'
@@ -43,28 +34,24 @@ export async function GET(request: NextRequest) {
       error: '服务器错误'
     }, { status: 500 })
   }
-}
+})
 
-// 创建提现申请
-export async function POST(request: NextRequest) {
+/**
+ * POST /api/withdrawals - 创建提现申请
+ *
+ * 认证要求: 已登录用户
+ * 请求体: {
+ *   amount: number,
+ *   withdrawMethod: 'bank' | 'alipay' | 'wechat',
+ *   bankName?: string,
+ *   bankAccount?: string,
+ *   accountName?: string,
+ *   alipayAccount?: string,
+ *   wechatAccount?: string
+ * }
+ */
+export const POST = withAuth(async (request, context, auth) => {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '未授权'
-      }, { status: 401 })
-    }
-
-    const payload = verifyToken(token)
-    if (!payload) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '无效的token'
-      }, { status: 401 })
-    }
-
     const body = await request.json()
     const {
       amount,
@@ -115,7 +102,7 @@ export async function POST(request: NextRequest) {
 
     // 获取用户信息
     const user = await prisma.user.findUnique({
-      where: { id: payload.userId }
+      where: { id: auth.userId }
     })
 
     if (!user) {
@@ -142,7 +129,7 @@ export async function POST(request: NextRequest) {
       // 创建提现申请
       const newWithdrawal = await tx.withdrawal.create({
         data: {
-          userId: payload.userId,
+          userId: auth.userId,
           amount,
           fee,
           actualAmount,
@@ -158,7 +145,7 @@ export async function POST(request: NextRequest) {
 
       // 立即扣除用户余额（冻结资金）
       await tx.user.update({
-        where: { id: payload.userId },
+        where: { id: auth.userId },
         data: {
           balance: {
             decrement: amount
@@ -181,4 +168,4 @@ export async function POST(request: NextRequest) {
       error: '服务器错误'
     }, { status: 500 })
   }
-}
+})

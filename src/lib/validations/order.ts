@@ -82,6 +82,10 @@ export const orderActionSchema = z.discriminatedUnion('action', [
     reason: z.string().min(5, '延期理由至少5个字').max(500, '延期理由最多500字')
   }),
   // 创建申诉
+  // 注意：reason 字段是可选的，因为 API 会根据订单状态自动生成
+  // - PAID 状态：reason = "退款申请被拒绝，申请平台介入"
+  // - TRANSFERRING 状态：reason = "未收到FSD权限"
+  // description 字段是必填的，用于用户详细描述问题
   z.object({
     action: z.literal('create_dispute'),
     reason: z.string().min(5, '申诉原因至少5个字').max(200, '申诉原因最多200字').optional(),
@@ -146,17 +150,4 @@ export const generateYearOptions = () => {
   }
 
   return years
-}
-
-// 平台费率
-export const PLATFORM_FEE_RATE = 0.03
-
-// 计算平台手续费
-export const calculatePlatformFee = (price: number): number => {
-  return Math.round(price * PLATFORM_FEE_RATE * 100) / 100
-}
-
-// 计算托管金额
-export const calculateEscrowAmount = (price: number): number => {
-  return price
 }

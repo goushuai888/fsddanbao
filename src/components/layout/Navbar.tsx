@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { UserDropdown } from './UserDropdown'
 
 interface NavbarProps {
   user?: {
@@ -27,16 +28,6 @@ export function Navbar({ user, onLogout }: NavbarProps) {
           {/* Navigation */}
           {user && (
             <div className="flex items-center gap-4">
-              {/* User Info */}
-              <span className="text-sm text-gray-600">
-                欢迎，{user.name || user.email}
-                {user.verified && (
-                  <span className="ml-1 text-green-600" title="已认证">
-                    ✓
-                  </span>
-                )}
-              </span>
-
               {/* Admin Link */}
               {user.role === 'ADMIN' && (
                 <Link href="/admin/users">
@@ -46,35 +37,12 @@ export function Navbar({ user, onLogout }: NavbarProps) {
                 </Link>
               )}
 
-              {/* User Links */}
-              <Link href="/profile">
-                <Button variant="outline" size="sm">
-                  个人中心
-                </Button>
-              </Link>
-
-              <Link href="/orders">
-                <Button variant="outline" size="sm">
-                  我的订单
-                </Button>
-              </Link>
-
-              <Link href="/transactions">
-                <Button variant="outline" size="sm">
-                  账务记录
-                </Button>
-              </Link>
-
-              {/* Logout Button */}
-              {onLogout && (
-                <Button
-                  onClick={onLogout}
-                  variant="ghost"
-                  size="sm"
-                >
-                  退出
-                </Button>
-              )}
+              {/* User Dropdown - 整合了个人中心、我的订单、账务记录、退出登录 */}
+              <UserDropdown
+                userName={user.name || user.email}
+                verified={user.verified}
+                onLogout={onLogout}
+              />
             </div>
           )}
         </div>

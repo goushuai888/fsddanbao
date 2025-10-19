@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { verifyToken } from '@/lib/infrastructure/auth/jwt'
 import { ApiResponse } from '@/types'
 
 // 获取申诉列表
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
 
     // 构建查询条件
-    let where: any = {}
+    const where: any = {}
     if (status && status !== 'all') {
       where.status = status
     }

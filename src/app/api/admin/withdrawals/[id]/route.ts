@@ -1,32 +1,26 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
-import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
+/**
+ * 管理员提现审核API（使用统一认证中间件）
+ */
+
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { adminOnly } from '@/lib/infrastructure/middleware/auth'
+import { logAudit, AUDIT_ACTIONS } from '@/lib/infrastructure/audit/audit-logger'
 import { ApiResponse } from '@/types'
 
-// 审核提现申请
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+/**
+ * PATCH /api/admin/withdrawals/[id] - 审核提现申请
+ *
+ * 认证要求: 管理员权限
+ * 操作类型:
+ * - approve: 批准提现
+ * - reject: 拒绝提现（恢复余额）
+ * - processing: 标记为处理中
+ * - complete: 完成提现
+ * - fail: 标记为失败（恢复余额）
+ */
+export const PATCH = adminOnly(async (request, { params }, auth) => {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '未授权'
-      }, { status: 401 })
-    }
-
-    const payload = verifyToken(token)
-    if (!payload || payload.role !== 'ADMIN') {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '无权访问'
-      }, { status: 403 })
-    }
-
     const { id } = params
     const body = await request.json()
     const { action, reviewNote, rejectReason, transactionId } = body
@@ -79,7 +73,7 @@ export async function PATCH(
         where: { id },
         data: {
           status: 'APPROVED',
-          reviewedBy: payload.userId,
+          reviewedBy: auth.userId,
           reviewNote,
           reviewedAt: new Date()
         }
@@ -87,7 +81,7 @@ export async function PATCH(
 
       // 记录审计日志
       await logAudit({
-        userId: payload.userId,
+        userId: auth.userId,
         action: AUDIT_ACTIONS.APPROVE_WITHDRAWAL,
         target: id,
         targetType: 'Withdrawal',
@@ -120,7 +114,7 @@ export async function PATCH(
           where: { id },
           data: {
             status: 'REJECTED',
-            reviewedBy: payload.userId,
+            reviewedBy: auth.userId,
             reviewNote,
             rejectReason,
             reviewedAt: new Date()
@@ -139,7 +133,7 @@ export async function PATCH(
 
       // 记录审计日志
       await logAudit({
-        userId: payload.userId,
+        userId: auth.userId,
         action: AUDIT_ACTIONS.REJECT_WITHDRAWAL,
         target: id,
         targetType: 'Withdrawal',
@@ -189,7 +183,7 @@ export async function PATCH(
 
       // 记录审计日志
       await logAudit({
-        userId: payload.userId,
+        userId: auth.userId,
         action: AUDIT_ACTIONS.COMPLETE_WITHDRAWAL,
         target: id,
         targetType: 'Withdrawal',
@@ -228,7 +222,7 @@ export async function PATCH(
 
       // 记录审计日志
       await logAudit({
-        userId: payload.userId,
+        userId: auth.userId,
         action: AUDIT_ACTIONS.FAIL_WITHDRAWAL,
         target: id,
         targetType: 'Withdrawal',
@@ -258,4 +252,4 @@ export async function PATCH(
       error: '服务器错误'
     }, { status: 500 })
   }
-}
+})

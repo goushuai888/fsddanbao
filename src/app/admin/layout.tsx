@@ -6,8 +6,16 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
 import { Menu, X, Home, LogOut } from 'lucide-react'
-import { setAuthToken, clearAuthToken } from '@/lib/cookies'
+import { setAuthToken, clearAuthToken } from '@/lib/utils/helpers/cookies'
 import { Toaster, toast } from 'sonner'
+
+// 管理员用户类型定义
+interface AdminUser {
+  id: string
+  email: string
+  name: string | null
+  role: 'ADMIN'
+}
 
 export default function AdminLayout({
   children,
@@ -15,7 +23,7 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<AdminUser | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [loading, setLoading] = useState(true)
 

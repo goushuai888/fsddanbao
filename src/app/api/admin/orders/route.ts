@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { verifyToken } from '@/lib/infrastructure/auth/jwt'
 import { ApiResponse } from '@/types'
 
 // 获取管理员订单列表
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate')
 
     // 构建查询条件
-    let where: any = {}
+    const where: any = {}
 
     // 状态筛选
     if (status && status !== 'all') {

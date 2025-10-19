@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useState } from 'react'
-import { setAuthToken } from '@/lib/cookies'
+import { setAuthToken } from '@/lib/utils/helpers/cookies'
 
 export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)

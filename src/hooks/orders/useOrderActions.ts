@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { OrderAction } from '@/types/order'
-import { ACTION_SUCCESS_MESSAGES } from '@/constants/order'
+import { ACTION_SUCCESS_MESSAGES } from '@/lib/domain/policies/order'
 
 export function useOrderActions(orderId: string, onSuccess?: () => void) {
   const [actionLoading, setActionLoading] = useState(false)

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Navbar } from '@/components/layout/Navbar'
 
 export default function HomePage() {
   const router = useRouter()
@@ -69,41 +70,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* 导航栏 */}
-      <nav className="bg-white border-b">
-        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold text-gray-900">
-            FSD担保交易平台
-          </Link>
-          <div className="flex items-center gap-4">
-            {isLoggedIn ? (
-              <>
-                <span className="text-sm text-gray-600">
-                  欢迎，{user?.name || user?.email}
-                  {user?.verified && <span className="ml-1 text-green-600">✓</span>}
-                </span>
-                {user?.role === 'ADMIN' && (
-                  <Link href="/admin/users">
-                    <Button variant="outline">用户管理</Button>
-                  </Link>
-                )}
-                <Link href="/orders">
-                  <Button variant="outline">我的订单</Button>
-                </Link>
-                <Button onClick={handleLogout} variant="ghost">退出</Button>
-              </>
-            ) : (
-              <>
-                <Link href="/login">
-                  <Button variant="outline">登录</Button>
-                </Link>
-                <Link href="/register">
-                  <Button>注册</Button>
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
+      <Navbar user={isLoggedIn ? user : null} onLogout={handleLogout} />
 
       {/* 主内容 */}
       <main className="container mx-auto px-4 py-8">

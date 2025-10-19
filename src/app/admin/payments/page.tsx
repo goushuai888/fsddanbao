@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { formatDate, formatPrice } from '@/lib/utils'
+import { Card, CardContent } from '@/components/ui/card'
+import { formatDate, formatPrice } from '@/lib/utils/helpers/common'
+import { AdminFilters, FilterField } from '@/components/admin/AdminFilters'
+import { useApiData } from '@/hooks/useApiData'
 
 interface Payment {
   id: string
@@ -46,52 +47,20 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 }
 
 export default function AdminPaymentsPage() {
-  const [payments, setPayments] = useState<Payment[]>([])
-  const [loading, setLoading] = useState(true)
-  const [typeFilter, setTypeFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  // 筛选状态
+  const [filters, setFilters] = useState({
+    type: 'all',
+    status: 'all',
+    search: '',
+    startDate: '',
+    endDate: ''
+  })
 
-  useEffect(() => {
-    fetchPayments()
-  }, [typeFilter, statusFilter, searchQuery, startDate, endDate])
-
-  const fetchPayments = async () => {
-    try {
-      setLoading(true)
-      const token = localStorage.getItem('token')
-
-      let url = '/api/admin/payments'
-      const params = new URLSearchParams()
-      if (typeFilter !== 'all') params.append('type', typeFilter)
-      if (statusFilter !== 'all') params.append('status', statusFilter)
-      if (searchQuery) params.append('search', searchQuery)
-      if (startDate) params.append('startDate', startDate)
-      if (endDate) params.append('endDate', endDate)
-      if (params.toString()) url += `?${params.toString()}`
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setPayments(data.data || [])
-      } else {
-        alert(data.error || '获取支付记录失败')
-      }
-    } catch (error) {
-      console.error('获取支付记录错误:', error)
-      alert('网络错误，请稍后重试')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // 使用通用数据获取 Hook
+  const { data: payments, loading } = useApiData<Payment>({
+    url: '/api/admin/payments',
+    params: filters
+  })
 
   // 计算总额
   const totalAmount = payments.reduce((sum, payment) => {
@@ -100,6 +69,47 @@ export default function AdminPaymentsPage() {
     }
     return sum
   }, 0)
+
+  // 筛选字段配置
+  const filterFields: FilterField[] = [
+    {
+      name: 'type',
+      label: '支付类型',
+      type: 'select',
+      options: [
+        { label: '全部类型', value: 'all' },
+        { label: '托管', value: 'ESCROW' },
+        { label: '释放', value: 'RELEASE' },
+        { label: '退款', value: 'REFUND' },
+        { label: '提现', value: 'WITHDRAWAL' }
+      ]
+    },
+    {
+      name: 'status',
+      label: '支付状态',
+      type: 'select',
+      options: [
+        { label: '全部状态', value: 'all' },
+        { label: '待处理', value: 'PENDING' },
+        { label: '处理中', value: 'PROCESSING' },
+        { label: '已完成', value: 'COMPLETED' },
+        { label: '失败', value: 'FAILED' }
+      ]
+    },
+    {
+      name: 'search',
+      label: '搜索',
+      type: 'text',
+      placeholder: '用户邮箱/订单号/交易ID'
+    },
+    {
+      name: 'dateRange',
+      label: '日期范围',
+      type: 'dateRange',
+      startDateName: 'startDate',
+      endDateName: 'endDate'
+    }
+  ]
 
   return (
     <div>
@@ -110,78 +120,14 @@ export default function AdminPaymentsPage() {
         </div>
       </div>
 
-      {/* 筛选和搜索 */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>筛选支付记录</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* 类型筛选 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">支付类型</label>
-              <select
-                value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">全部类型</option>
-                <option value="ESCROW">托管</option>
-                <option value="RELEASE">释放</option>
-                <option value="REFUND">退款</option>
-                <option value="WITHDRAWAL">提现</option>
-              </select>
-            </div>
-
-            {/* 状态筛选 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">支付状态</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">全部状态</option>
-                <option value="PENDING">待处理</option>
-                <option value="PROCESSING">处理中</option>
-                <option value="COMPLETED">已完成</option>
-                <option value="FAILED">失败</option>
-              </select>
-            </div>
-
-            {/* 搜索 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">搜索</label>
-              <Input
-                type="text"
-                placeholder="用户邮箱/订单号/交易ID"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            {/* 开始日期 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">开始日期</label>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-
-            {/* 结束日期 */}
-            <div>
-              <label className="block text-sm font-medium mb-2">结束日期</label>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* 使用通用筛选组件 */}
+      <AdminFilters
+        title="筛选支付记录"
+        fields={filterFields}
+        values={filters}
+        onChange={setFilters}
+        className="mb-6"
+      />
 
       {/* 统计卡片 */}
       {!loading && payments.length > 0 && (

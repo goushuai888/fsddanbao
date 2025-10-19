@@ -1,40 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
-import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
+/**
+ * 管理员用户管理API（使用统一认证中间件）
+ */
+
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { adminOnly } from '@/lib/infrastructure/middleware/auth'
+import { logAudit, AUDIT_ACTIONS } from '@/lib/infrastructure/audit/audit-logger'
 import { ApiResponse } from '@/types'
 
-// 获取用户详情（仅管理员）
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+/**
+ * GET /api/admin/users/[id] - 获取用户详情
+ *
+ * 认证要求: 管理员权限
+ */
+export const GET = adminOnly(async (request, { params }, auth) => {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '未授权'
-      }, { status: 401 })
-    }
-
-    const payload = verifyToken(token)
-    if (!payload) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '无效的token'
-      }, { status: 401 })
-    }
-
-    // 检查是否为管理员
-    if (payload.role !== 'ADMIN') {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '无权访问'
-      }, { status: 403 })
-    }
-
     const user = await prisma.user.findUnique({
       where: { id: params.id },
       select: {
@@ -115,39 +95,16 @@ export async function GET(
       error: '服务器错误'
     }, { status: 500 })
   }
-}
+})
 
-// 更新用户信息（仅管理员）
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+/**
+ * PATCH /api/admin/users/[id] - 更新用户信息
+ *
+ * 认证要求: 管理员权限
+ * 可更新字段: name, phone, role, verified, balance
+ */
+export const PATCH = adminOnly(async (request, { params }, auth) => {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '未授权'
-      }, { status: 401 })
-    }
-
-    const payload = verifyToken(token)
-    if (!payload) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '无效的token'
-      }, { status: 401 })
-    }
-
-    // 检查是否为管理员
-    if (payload.role !== 'ADMIN') {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '无权访问'
-      }, { status: 403 })
-    }
-
     const body = await request.json()
     const { name, phone, role, verified, balance } = body
 
@@ -171,7 +128,7 @@ export async function PATCH(
     }
 
     // 构建更新数据
-    const updateData: any = {}
+    const updateData: Record<string, unknown> = {}
 
     if (name !== undefined) updateData.name = name
     if (phone !== undefined) updateData.phone = phone
@@ -197,7 +154,7 @@ export async function PATCH(
 
     // 记录审计日志
     await logAudit({
-      userId: payload.userId,
+      userId: auth.userId,
       action: balance !== undefined ? AUDIT_ACTIONS.UPDATE_USER_BALANCE : AUDIT_ACTIONS.UPDATE_USER_ROLE,
       target: params.id,
       targetType: 'User',
@@ -225,39 +182,15 @@ export async function PATCH(
       error: '服务器错误'
     }, { status: 500 })
   }
-}
+})
 
-// 删除用户（仅管理员）
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+/**
+ * DELETE /api/admin/users/[id] - 删除用户
+ *
+ * 认证要求: 管理员权限
+ */
+export const DELETE = adminOnly(async (request, { params }, auth) => {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '未授权'
-      }, { status: 401 })
-    }
-
-    const payload = verifyToken(token)
-    if (!payload) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '无效的token'
-      }, { status: 401 })
-    }
-
-    // 检查是否为管理员
-    if (payload.role !== 'ADMIN') {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '无权访问'
-      }, { status: 403 })
-    }
-
     // 获取被删除用户的完整信息（用于审计日志）
     const userToDelete = await prisma.user.findUnique({
       where: { id: params.id },
@@ -306,7 +239,7 @@ export async function DELETE(
 
     // 记录审计日志
     await logAudit({
-      userId: payload.userId,
+      userId: auth.userId,
       action: AUDIT_ACTIONS.DELETE_USER,
       target: params.id,
       targetType: 'User',
@@ -326,4 +259,4 @@ export async function DELETE(
       error: '服务器错误'
     }, { status: 500 })
   }
-}
+})

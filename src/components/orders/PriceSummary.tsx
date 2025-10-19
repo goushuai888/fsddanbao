@@ -1,5 +1,5 @@
-import { formatPrice } from '@/lib/utils'
-import { calculatePlatformFee, PLATFORM_FEE_RATE } from '@/lib/validations/order'
+import { formatPrice } from '@/lib/utils/helpers/common'
+import { calculatePlatformFee, ORDER_RULES } from '@/lib/domain/policies/business-rules'
 
 interface PriceSummaryProps {
   price: number
@@ -32,7 +32,7 @@ export function PriceSummary({ price, className = '' }: PriceSummaryProps) {
         <div className="flex justify-between items-center py-2 border-b border-blue-100">
           <span className="text-gray-600 text-sm flex items-center">
             平台手续费
-            <span className="ml-1 text-xs text-blue-600">({(PLATFORM_FEE_RATE * 100).toFixed(0)}%)</span>
+            <span className="ml-1 text-xs text-blue-600">({(ORDER_RULES.FEES.PLATFORM_FEE_RATE * 100).toFixed(0)}%)</span>
           </span>
           <span className="text-sm font-medium text-red-600">
             -{price > 0 ? formatPrice(platformFee) : '¥0.00'}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { comparePassword, generateToken } from '@/lib/auth'
-import { authLimiter, getClientIp, checkRateLimit } from '@/lib/ratelimit'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { comparePassword, generateToken } from '@/lib/infrastructure/auth/jwt'
+import { authLimiter, getClientIp, checkRateLimit } from '@/lib/infrastructure/security/ratelimit'
 import { loginSchema } from '@/lib/validations/auth'
 import { ApiResponse } from '@/types'
 

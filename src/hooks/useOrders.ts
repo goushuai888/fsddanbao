@@ -54,11 +54,40 @@ export function useOrders(options: UseOrdersOptions = {}): UseOrdersReturn {
     autoFetch = true
   } = options
 
+  // ✅ 从 localStorage 读取上次的筛选状态（仅在客户端）
+  const getStoredFilterType = (): OrderFilterType => {
+    if (typeof window === 'undefined') return initialFilterType
+    const stored = localStorage.getItem('orderFilterType')
+    return (stored as OrderFilterType) || initialFilterType
+  }
+
+  const getStoredStatusFilter = (): OrderStatusFilter => {
+    if (typeof window === 'undefined') return initialStatusFilter
+    const stored = localStorage.getItem('orderStatusFilter')
+    return (stored as OrderStatusFilter) || initialStatusFilter
+  }
+
   const [orders, setOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [filterType, setFilterType] = useState<OrderFilterType>(initialFilterType)
-  const [statusFilter, setStatusFilter] = useState<OrderStatusFilter>(initialStatusFilter)
+  const [filterType, setFilterTypeState] = useState<OrderFilterType>(getStoredFilterType())
+  const [statusFilter, setStatusFilterState] = useState<OrderStatusFilter>(getStoredStatusFilter())
+
+  // ✅ 包装 setFilterType，同时保存到 localStorage
+  const setFilterType = (type: OrderFilterType) => {
+    setFilterTypeState(type)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('orderFilterType', type)
+    }
+  }
+
+  // ✅ 包装 setStatusFilter，同时保存到 localStorage
+  const setStatusFilter = (status: OrderStatusFilter) => {
+    setStatusFilterState(status)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('orderStatusFilter', status)
+    }
+  }
 
   const fetchOrders = useCallback(async () => {
     try {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { clearAuthToken } from '@/lib/cookies'
+import { clearAuthToken } from '@/lib/utils/helpers/cookies'
 
 interface User {
   id: string

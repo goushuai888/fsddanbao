@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatDate, formatPrice } from '@/lib/utils'
-import { sanitizeText } from '@/lib/sanitize'
-import { handleApiError } from '@/lib/error-handler'
+import { Card, CardContent } from '@/components/ui/card'
+import { formatDate, formatPrice } from '@/lib/utils/helpers/common'
+import { sanitizeText } from '@/lib/infrastructure/security/sanitize'
+import { handleApiError } from '@/lib/utils/helpers/error-handler'
 import { toast } from 'sonner'
 import { RefundActionSchema } from '@/lib/validations/admin'
+import { AdminFilters, FilterField } from '@/components/admin/AdminFilters'
+import { useApiData } from '@/hooks/useApiData'
 
 interface RefundRequest {
   id: string
@@ -42,67 +44,23 @@ const REFUND_STATUS_MAP: Record<string, { label: string; color: string }> = {
 }
 
 export default function AdminRefundsPage() {
-  const [refunds, setRefunds] = useState<RefundRequest[]>([])
-  const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState('all')
+  // 筛选状态
+  const [filters, setFilters] = useState({
+    status: 'all'
+  })
+
+  // 对话框状态（保留）
   const [selectedRefund, setSelectedRefund] = useState<RefundRequest | null>(null)
   const [showDialog, setShowDialog] = useState(false)
   const [note, setNote] = useState('')
   const [actionType, setActionType] = useState<'approve' | 'reject'>('approve')
   const [actionLoading, setActionLoading] = useState(false)
 
-  const fetchRefunds = useCallback(async (signal?: AbortSignal) => {
-    try {
-      setLoading(true)
-      const token = localStorage.getItem('token')
-
-      let url = '/api/admin/refunds'
-      if (statusFilter !== 'all') {
-        url += `?status=${statusFilter}`
-      }
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        signal // 传递AbortSignal
-      })
-
-      // ✅ 统一错误处理: 检查HTTP状态码
-      if (!response.ok) {
-        handleApiError(response, '获取退款申请列表')
-        return
-      }
-
-      const data = await response.json()
-
-      if (data.success) {
-        setRefunds(data.data || [])
-      } else {
-        handleApiError(data, '获取退款申请列表')
-      }
-    } catch (error) {
-      // 忽略AbortError（组件卸载或快速切换筛选时的正常取消）
-      if (error instanceof Error && error.name === 'AbortError') {
-        return
-      }
-      console.error('获取退款申请列表错误:', error)
-      handleApiError(error, '获取退款申请列表')
-    } finally {
-      setLoading(false)
-    }
-  }, [statusFilter]) // 添加依赖
-
-  useEffect(() => {
-    // ✅ 内存泄漏防护: 使用AbortController取消未完成的请求
-    const controller = new AbortController()
-
-    fetchRefunds(controller.signal)
-
-    return () => {
-      controller.abort()
-    }
-  }, [fetchRefunds]) // 使用fetchRefunds作为依赖
+  // 使用通用数据获取 Hook
+  const { data: refunds, loading, refetch } = useApiData<RefundRequest>({
+    url: '/api/admin/refunds',
+    params: filters
+  })
 
   const handleAction = async () => {
     if (!selectedRefund) return
@@ -149,7 +107,7 @@ export default function AdminRefundsPage() {
         setShowDialog(false)
         setSelectedRefund(null)
         setNote('')
-        fetchRefunds()
+        refetch()  // ✅ 使用 refetch 刷新数据
       } else {
         handleApiError(data, '处理退款申请')
       }
@@ -168,6 +126,21 @@ export default function AdminRefundsPage() {
     setNote('')
   }
 
+  // 筛选字段配置
+  const filterFields: FilterField[] = [
+    {
+      name: 'status',
+      label: '退款状态',
+      type: 'select',
+      options: [
+        { label: '全部状态', value: 'all' },
+        { label: '待处理', value: 'PENDING' },
+        { label: '已同意', value: 'APPROVED' },
+        { label: '已拒绝', value: 'REJECTED' }
+      ]
+    }
+  ]
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
@@ -177,29 +150,14 @@ export default function AdminRefundsPage() {
         </div>
       </div>
 
-      {/* 筛选 */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>筛选退款申请</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="block text-sm font-medium mb-2">退款状态</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="all">全部状态</option>
-                <option value="PENDING">待处理</option>
-                <option value="APPROVED">已同意</option>
-                <option value="REJECTED">已拒绝</option>
-              </select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* 使用通用筛选组件 */}
+      <AdminFilters
+        title="筛选退款申请"
+        fields={filterFields}
+        values={filters}
+        onChange={setFilters}
+        className="mb-6"
+      />
 
       {/* 退款申请列表 */}
       {loading ? (

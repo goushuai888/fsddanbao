@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -12,6 +12,8 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PriceSummary } from '@/components/orders/PriceSummary'
 import { TransactionGuide } from '@/components/orders/TransactionGuide'
+import { Navbar } from '@/components/layout/Navbar'
+import { useAuth } from '@/hooks/useAuth'
 import {
   createOrderSchema,
   type CreateOrderFormData,
@@ -21,10 +23,16 @@ import {
   generateYearOptions
 } from '@/lib/validations/order'
 
+// ✅ 优化：将年份选项移到组件外部，只生成一次
+const YEAR_OPTIONS = generateYearOptions()
+
 export default function CreateOrderPage() {
   const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedBrand, setSelectedBrand] = useState('')
+
+  // ✅ 优化：使用 useAuth hook 替代 useEffect 登录检查
+  const { user, isLoading: authLoading, logout } = useAuth(true) // 第二个参数表示需要认证
 
   const {
     register,
@@ -47,17 +55,10 @@ export default function CreateOrderPage() {
   const watchedPrice = watch('price')
   const watchedBrand = watch('vehicleBrand')
 
-  // 检查登录状态
-  useEffect(() => {
-    const token = localStorage.getItem('token')
-    const userData = localStorage.getItem('user')
-
-    if (!token || !userData) {
-      localStorage.setItem('redirectAfterLogin', '/orders/create')
-      toast.error('请先登录后再发布订单')
-      router.push('/login')
-    }
-  }, [router])
+  // ✅ 优化：使用 useMemo 缓存型号选项，减少重渲染
+  const modelOptions = useMemo(() => {
+    return selectedBrand ? VEHICLE_MODELS[selectedBrand] : [{ value: '', label: '请先选择品牌' }]
+  }, [selectedBrand])
 
   // 当品牌改变时，重置型号
   useEffect(() => {
@@ -66,6 +67,18 @@ export default function CreateOrderPage() {
       setValue('vehicleModel', '')
     }
   }, [watchedBrand, selectedBrand, setValue])
+
+  // ✅ 优化：认证加载时显示骨架屏，避免闪烁
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">加载中...</p>
+        </div>
+      </div>
+    )
+  }
 
   const onSubmit = async (data: CreateOrderFormData) => {
     try {
@@ -113,29 +126,10 @@ export default function CreateOrderPage() {
     }
   }
 
-  const yearOptions = generateYearOptions()
-  const modelOptions = selectedBrand ? VEHICLE_MODELS[selectedBrand] : [{ value: '', label: '请先选择品牌' }]
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* 导航栏 */}
-      <nav className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              FSD担保交易平台
-            </Link>
-            <div className="flex items-center gap-4">
-              <Link href="/orders">
-                <Button variant="ghost">我的订单</Button>
-              </Link>
-              <Link href="/profile">
-                <Button variant="outline">个人中心</Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Navbar user={user} onLogout={logout} />
 
       {/* 主内容 */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -217,7 +211,7 @@ export default function CreateOrderPage() {
                         <SelectValue placeholder="请选择年份" />
                       </SelectTrigger>
                       <SelectContent>
-                        {yearOptions.filter(y => y.value > 0).map((year) => (
+                        {YEAR_OPTIONS.filter(y => y.value > 0).map((year) => (
                           <SelectItem key={year.value} value={year.value.toString()}>
                             {year.label}
                           </SelectItem>

@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatPrice, maskString } from '@/lib/utils'
+import { formatPrice, maskString } from '@/lib/utils/helpers/common'
 import { Order, UserInfo } from '@/types/order'
 
 interface OrderVehicleInfoProps {

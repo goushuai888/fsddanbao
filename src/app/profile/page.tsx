@@ -8,7 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { formatPrice } from '@/lib/utils'
+import { Navbar } from '@/components/layout/Navbar'
+import { formatPrice } from '@/lib/utils/helpers/common'
 
 interface UserProfile {
   id: string
@@ -192,7 +193,11 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className="min-h-screen bg-gray-50">
+      {/* 导航栏 */}
+      <Navbar user={user} onLogout={handleLogout} />
+
+      <div className="py-8">
       <div className="container mx-auto px-4 max-w-4xl">
         {/* 返回链接 */}
         <div className="mb-4">
@@ -353,6 +358,7 @@ export default function ProfilePage() {
             </Card>
           </TabsContent>
         </Tabs>
+      </div>
       </div>
     </div>
   )

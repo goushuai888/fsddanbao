@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { formatRemainingTime, getRemainingTime } from '@/lib/constants/refund-config'
+import { formatRemainingTime, getRemainingTime } from '@/lib/domain/policies/refund-config'
 
 interface RefundCountdownProps {
   deadline: string | Date  // 截止时间

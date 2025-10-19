@@ -8,8 +8,8 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card'
-import { formatPrice, formatDate, maskString } from '@/lib/utils'
-import { getUserRoleInOrder, getOrderStatusDisplay, OrderStatus } from '@/constants/order-status'
+import { formatPrice, formatDate, maskString } from '@/lib/utils/helpers/common'
+import { getUserRoleInOrder, getOrderStatusDisplay, OrderStatus } from '@/lib/domain/policies/order-status'
 import type { Order } from '@/hooks/useOrders'
 
 export interface OrderCardProps {

@@ -1,35 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { verifyToken } from '@/lib/auth'
+/**
+ * 管理员收益统计API（使用统一认证中间件）
+ */
+
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/infrastructure/database/prisma'
+import { adminOnly } from '@/lib/infrastructure/middleware/auth'
 import { ApiResponse } from '@/types'
 
-// 获取收益统计数据
-export async function GET(request: NextRequest) {
+/**
+ * GET /api/admin/revenue - 获取收益统计数据
+ *
+ * 认证要求: 管理员权限
+ * 查询参数:
+ * - startDate: 开始日期
+ * - endDate: 结束日期
+ * - period: 统计周期 (day/week/month)
+ */
+export const GET = adminOnly(async (request, context, auth) => {
   try {
-    const token = request.headers.get('authorization')?.replace('Bearer ', '')
-
-    if (!token) {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '未授权'
-      }, { status: 401 })
-    }
-
-    const payload = verifyToken(token)
-    if (!payload || payload.role !== 'ADMIN') {
-      return NextResponse.json<ApiResponse>({
-        success: false,
-        error: '无权访问'
-      }, { status: 403 })
-    }
-
     const { searchParams } = new URL(request.url)
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
     const period = searchParams.get('period') || 'day' // day, week, month
 
     // 构建日期范围
-    let dateFilter: any = {
+    const dateFilter: Record<string, unknown> = {
       status: 'COMPLETED'
     }
 
@@ -153,7 +148,7 @@ export async function GET(request: NextRequest) {
       error: '服务器错误'
     }, { status: 500 })
   }
-}
+})
 
 // 获取周数的辅助函数
 function getWeekNumber(date: Date): number {

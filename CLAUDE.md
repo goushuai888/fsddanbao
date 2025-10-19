@@ -64,7 +64,12 @@ DATABASE_URL="postgresql://..." npx tsx scripts/verify-transactions.ts
 
 # 乐观锁测试（验证并发购买保护机制）
 DATABASE_URL="postgresql://..." npx tsx scripts/verify-optimistic-lock.ts
+
+# 手续费计算测试（验证平台手续费正确扣除 - 2025-10-19新增）
+DATABASE_URL="postgresql://..." npx tsx scripts/verify-platform-fee-calculation.ts
 ```
+
+**归档测试脚本**: 已完成测试的脚本保存在 `scripts/archive/` 目录作为参考
 
 ## 项目架构
 
@@ -75,29 +80,75 @@ DATABASE_URL="postgresql://..." npx tsx scripts/verify-optimistic-lock.ts
 - **UI组件**: Radix UI + Tailwind CSS + class-variance-authority
 
 ### 目录结构
+
+**架构模式**: 薄UseCase层 + Next.js App Router
+
+当前架构采用**薄UseCase层**模式，而非完整的DDD（领域驱动设计）。这种轻量级架构在保持业务逻辑封装的同时，避免了过度设计的复杂性。
+
 ```
 src/
 ├── app/                    # Next.js App Router 页面和路由
 │   ├── api/               # API 路由处理
 │   │   ├── auth/         # 认证接口（注册/登录）
-│   │   └── orders/       # 订单接口（CRUD + 状态流转）
+│   │   ├── orders/       # 订单接口（CRUD + 状态流转）
+│   │   ├── admin/        # 管理员接口
+│   │   └── user/         # 用户接口
 │   ├── login/            # 登录页面
 │   ├── register/         # 注册页面
 │   ├── orders/           # 订单相关页面
+│   ├── admin/            # 管理员页面
 │   ├── layout.tsx        # 根布局
 │   └── page.tsx          # 首页
+├── application/           # 业务逻辑层（UseCase模式）
+│   └── use-cases/        # 封装复杂业务操作（确认收货、退款等）
 ├── components/
+│   ├── admin/            # 管理员组件（统一FormDialog等）
+│   ├── orders/           # 订单相关组件
 │   └── ui/               # 基于 Radix UI 的可复用组件
+├── domain/               # 领域模型层
+│   └── errors/           # 业务错误定义
 ├── lib/
+│   ├── config/           # 统一配置索引（NEW - 2025-10-19）
+│   ├── constants/        # 业务常量配置
+│   ├── middleware/       # 认证中间件
 │   ├── prisma.ts         # Prisma Client 单例
 │   ├── auth.ts           # 认证工具函数（JWT、密码哈希）
-│   └── utils.ts          # 通用工具函数（cn 等）
+│   ├── audit.ts          # 审计日志工具
+│   ├── sanitize.ts       # XSS防护工具
+│   └── utils.ts          # 通用工具函数（cn、formatPrice等）
+├── hooks/                # React自定义Hooks
 └── types/
     └── index.ts          # TypeScript 类型定义
 
 prisma/
 └── schema.prisma         # 数据库 schema 定义
+
+scripts/
+├── create-admin.ts                      # 管理员账户创建工具
+├── verify-transactions.ts               # 事务完整性测试
+├── verify-optimistic-lock.ts            # 乐观锁测试
+├── verify-platform-fee-calculation.ts   # 手续费计算测试 (2025-10-19)
+└── archive/                             # 已完成的测试脚本（归档）
+    └── verify-concurrent-operations.ts  # 并发操作测试（已由verify-optimistic-lock.ts替代）
 ```
+
+**架构说明**:
+
+1. **薄UseCase层 (application/use-cases/)**
+   - 封装复杂的业务操作（如确认收货、退款流程）
+   - 保证事务完整性和业务规则
+   - 不使用完整DDD的Repository/Entity/ValueObject等概念
+   - 适合小团队和中小规模项目
+
+2. **领域模型层 (domain/)**
+   - 仅包含业务错误定义和核心类型
+   - 不是完整的DDD Domain Layer
+
+3. **为什么不使用完整DDD?**
+   - ✅ **团队规模**: 小团队不需要重量级架构
+   - ✅ **复杂度**: 当前UseCase模式已提供足够封装
+   - ✅ **学习曲线**: 避免陡峭的DDD概念学习
+   - ✅ **灵活性**: 根据需要逐步演进，而非一开始过度设计
 
 ## 核心数据模型
 
@@ -212,12 +263,104 @@ PLATFORM_FEE_RATE=0.03          # 平台手续费率（3%）
 可选配置：
 - `NEXTAUTH_URL`, `NEXTAUTH_SECRET`: NextAuth.js（如果使用）
 - `ALIPAY_*`, `WECHAT_*`: 支付接口配置（待实现）
-- `UPLOAD_DIR`, `MAX_FILE_SIZE`: 文件上传配置（待实现）
 
-## 最近更新（2025-10-18）
+七牛云存储配置（2025-10-19新增）：
+```
+QINIU_ACCESS_KEY="..."       # 七牛云AccessKey
+QINIU_SECRET_KEY="..."       # 七牛云SecretKey
+QINIU_BUCKET="fsddanbao"     # 存储空间名称
+QINIU_ZONE="Zone_as0"        # 存储区域（亚太-新加坡）
+
+# 域名配置（选择其中一种）
+# 方式一：S3协议域名（快速开始）
+QINIU_DOMAIN="https://fsddanbao.s3.ap-southeast-1.qiniucs.com"
+
+# 方式二：自定义CDN域名（生产推荐）
+# QINIU_DOMAIN="https://cdn.yourdomain.com"
+```
+
+**重要提示**：
+- **开发/测试环境**：使用 S3 协议域名，无需额外配置，立即可用
+- **生产环境**：推荐绑定自定义 CDN 域名，提升性能和品牌形象
+- 详见 `QINIU_INTEGRATION.md` 配置指南
+
+## 最近更新
+
+### 📤 七牛云图片上传集成 ✅
+**完成时间**：2025-10-19
+**需求**：_"帮我对接 https://developer.qiniu.com/kodo/3939/overview-of-the-api 替换掉转移凭证URL"_
+
+**实现内容**：
+
+1. ✅ **七牛云存储服务** (`src/lib/infrastructure/storage/qiniu.ts`)
+   - 生成上传Token（服务端安全验证）
+   - 生成唯一文件名（按年月分目录：`transfer-proofs/2025/10/timestamp-random.jpg`）
+   - URL验证和安全检查
+   - 文件类型和大小限制（图片10MB，视频100MB）
+
+2. ✅ **上传Token API** (`POST /api/upload/token`)
+   - JWT认证保护
+   - 限流保护（30次/分钟）
+   - 返回上传凭证和配置信息
+   - 支持图片和视频上传
+
+3. ✅ **前端上传组件** (`QiniuImageUpload.tsx`)
+   - 点击上传和拖拽上传
+   - 实时图片预览
+   - 上传进度显示
+   - 文件类型和大小验证（前端+服务端双重验证）
+   - 友好的错误提示
+
+4. ✅ **订单详情页集成** (`src/app/orders/[id]/page.tsx`)
+   - 移除URL输入框
+   - 添加图片上传组件
+   - 简化验证逻辑（直接使用七牛云URL）
+   - 上传成功自动填充transferProof字段
+
+**上传流程**：
+```
+1. 用户选择文件（点击或拖拽）
+   ↓
+2. 前端验证（文件类型、大小）
+   ↓
+3. 调用 /api/upload/token 获取上传凭证
+   ↓
+4. 直传到七牛云（https://upload-z2.qiniup.com）
+   ↓
+5. 上传成功，返回文件URL
+   ↓
+6. 提交订单时使用七牛云URL
+```
+
+**新增文件**：
+```
+src/lib/infrastructure/storage/qiniu.ts      # 七牛云服务
+src/app/api/upload/token/route.ts            # 上传Token API
+src/components/upload/QiniuImageUpload.tsx   # 上传组件
+QINIU_INTEGRATION.md                         # 详细集成文档
+```
+
+**技术亮点**：
+- 🚀 **前端直传** - 不经过服务器，节省带宽和处理时间
+- 🔒 **安全保护** - Token验证、MIME类型限制、文件大小限制
+- 📁 **智能分类** - 按年月自动分目录存储
+- 🎨 **用户体验** - 拖拽上传、实时预览、进度显示
+- ⚡ **CDN加速** - 亚太-新加坡节点，访问快速
+
+**配置要求**：
+- ⚠️ **需要配置CDN域名** - 私有空间必须绑定自定义域名才能访问
+- 详细配置步骤见 `QINIU_INTEGRATION.md`
+
+**业务价值**：
+- ✅ 简化用户操作 - 从"上传到外部→复制URL→粘贴"简化为"直接上传"
+- ✅ 提升安全性 - 统一存储管理，防止恶意URL
+- ✅ 优化性能 - CDN加速，图片加载更快
+- ✅ 降低成本 - 前端直传节省服务器带宽
+
+---
 
 ### 🚨 订单业务逻辑修复（CRITICAL）✅
-**完成时间**：2025-10-18（最新）
+**完成时间**：2025-10-18
 **严重程度**：🚨 CRITICAL (CVSS 9.1 - 业务逻辑绕过)
 **用户报告**：_"买家付款后，卖家仍能点击取消订单，取消成功了"_
 
@@ -670,9 +813,22 @@ DATABASE_URL="..." npx tsx scripts/verify-optimistic-lock.ts
 - 并发购买保护（3个买家同时购买，只有1个成功）
 - 错误version拒绝（使用旧version购买失败）
 
+**手续费计算测试** (`scripts/verify-platform-fee-calculation.ts`):
+```bash
+DATABASE_URL="..." npx tsx scripts/verify-platform-fee-calculation.ts
+```
+验证内容：
+- 订单创建时正确保存platformFee
+- 确认收货时正确扣除手续费
+- UI显示的手续费与实际一致
+- 旧数据(platformFee=null)自动fallback
+
+**归档测试脚本**: 已完成的测试保存在 `scripts/archive/` 目录（详见README）
+
 **最近测试结果**：
 - 事务完整性：4/4 通过 (100%)
 - 乐观锁机制：3/3 通过 (100%)
+- 手续费计算：4/4 通过 (100%) - 2025-10-19新增
 - 数据库索引：27个已创建并生效
 
 ## 业务逻辑核心
@@ -762,6 +918,8 @@ DATABASE_URL="..." npx tsx scripts/verify-optimistic-lock.ts
 ### 测试脚本
 - **scripts/verify-transactions.ts** - 事务完整性测试（4个测试场景）
 - **scripts/verify-optimistic-lock.ts** - 乐观锁测试（3个测试场景）
+- **scripts/verify-platform-fee-calculation.ts** - 手续费计算测试（4个测试场景 - 2025-10-19新增）
+- **scripts/archive/** - 已完成的测试脚本归档（详见README）
 
 ## 代码审查发现
 

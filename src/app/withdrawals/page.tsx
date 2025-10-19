@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { formatDate, formatPrice } from '@/lib/utils'
+import { Navbar } from '@/components/layout/Navbar'
+import { formatDate, formatPrice } from '@/lib/utils/helpers/common'
 import { ArrowLeft } from 'lucide-react'
 import {
   Dialog,
@@ -39,6 +40,8 @@ interface User {
   id: string
   name: string | null
   email: string
+  role: string
+  verified: boolean
   balance: number
 }
 
@@ -224,8 +227,18 @@ export default function WithdrawalsPage() {
     return num - calculateFee(amount)
   }
 
+  const handleLogout = () => {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    router.push('/login')
+  }
+
   return (
-    <div className="container mx-auto py-8 px-4">
+    <div className="min-h-screen bg-gray-50">
+      {/* 导航栏 */}
+      <Navbar user={user} onLogout={handleLogout} />
+
+      <div className="container mx-auto py-8 px-4">
       <div className="max-w-6xl mx-auto">
         {/* 返回按钮行 */}
         <div className="mb-4">
@@ -257,7 +270,7 @@ export default function WithdrawalsPage() {
                 <div>
                   <p className="text-sm text-gray-600">账户余额</p>
                   <p className="text-3xl font-bold text-gray-900 mt-1">
-                    {formatPrice(user.balance)}
+                    {formatPrice(Number(user.balance))}
                   </p>
                 </div>
                 <div className="text-right text-sm text-gray-500">
@@ -465,6 +478,7 @@ export default function WithdrawalsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      </div>
       </div>
     </div>
   )
