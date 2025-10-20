@@ -21,6 +21,8 @@ import {
   InternalServerError
 } from '@/lib/domain/DomainErrors'
 import { calculatePlatformFee } from '@/lib/domain/policies/business-rules'
+import { walletService } from '@/lib/domain/finance/WalletService'
+import { FinancialError } from '@/lib/domain/finance/types'
 import type { Order } from '@prisma/client'
 
 export interface ConfirmOrderInput {
@@ -100,29 +102,16 @@ export class ConfirmOrderUseCase {
 
         console.log(`[ConfirmOrder] 订单${order.orderNo} 价格:${order.price} 手续费:${platformFee} 释放金额:${releaseAmount}`)
 
-        // 4.4 创建释放款项记录
-        await tx.payment.create({
-          data: {
-            orderId: order.id,
-            userId: order.sellerId,
-            amount: releaseAmount,
-            type: 'RELEASE',
-            status: 'COMPLETED',
-            note: '订单完成,释放款项给卖家'
-          }
-        })
+        // 4.4 使用WalletService释放款项给卖家（原子创建Payment + 更新余额）
+        await walletService.credit({
+          userId: order.sellerId,
+          amount: releaseAmount,
+          type: 'RELEASE',
+          orderId: order.id,
+          note: `订单 ${order.orderNo} 确认收货，释放款项给卖家`
+        }, tx)
 
-        // 4.5 更新卖家余额
-        await tx.user.update({
-          where: { id: order.sellerId },
-          data: {
-            balance: {
-              increment: releaseAmount
-            }
-          }
-        })
-
-        // 4.6 重新查询订单获取最新数据
+        // 4.5 重新查询订单获取最新数据
         const completed = await tx.order.findUnique({
           where: { id: orderId }
         })
@@ -136,6 +125,11 @@ export class ConfirmOrderUseCase {
       // 如果是已知的业务错误，直接抛出
       if (error instanceof OptimisticLockError) {
         throw error
+      }
+
+      // 财务操作错误
+      if (error instanceof FinancialError) {
+        throw new InternalServerError(`确认收货失败: ${error.message}`, error)
       }
 
       // 事务失败（可能是数据库错误、余额更新失败等）

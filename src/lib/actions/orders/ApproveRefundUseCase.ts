@@ -19,6 +19,8 @@ import {
   OrderNotFoundError,
   InternalServerError
 } from '@/lib/domain/DomainErrors'
+import { walletService } from '@/lib/domain/finance/WalletService'
+import { FinancialError } from '@/lib/domain/finance/types'
 import type { Order } from '@prisma/client'
 
 export interface ApproveRefundInput {
@@ -92,31 +94,17 @@ export class ApproveRefundUseCase {
           throw new OptimisticLockError('订单状态或退款申请已变更，请刷新页面后重试')
         }
 
-        // 4.3 创建退款记录并更新买家余额
+        // 4.3 使用WalletService退款给买家（原子创建Payment + 更新余额）
         if (order.buyerId) {
           const refundAmount = order.escrowAmount || order.price
 
-          // 4.3.1 创建退款记录
-          await tx.payment.create({
-            data: {
-              orderId: order.id,
-              userId: order.buyerId,
-              amount: refundAmount,
-              type: 'REFUND',
-              status: 'COMPLETED',
-              note: '卖家同意退款申请'
-            }
-          })
-
-          // 4.3.2 更新买家余额
-          await tx.user.update({
-            where: { id: order.buyerId },
-            data: {
-              balance: {
-                increment: refundAmount
-              }
-            }
-          })
+          await walletService.credit({
+            userId: order.buyerId,
+            amount: refundAmount,
+            type: 'REFUND',
+            orderId: order.id,
+            note: `订单 ${order.orderNo} 卖家同意退款申请`
+          }, tx)
         }
 
         // 4.4 重新查询订单获取最新数据
@@ -133,6 +121,11 @@ export class ApproveRefundUseCase {
       // 如果是已知的业务错误，直接抛出
       if (error instanceof OptimisticLockError) {
         throw error
+      }
+
+      // 财务操作错误
+      if (error instanceof FinancialError) {
+        throw new InternalServerError(`退款失败: ${error.message}`, error)
       }
 
       // 事务失败（可能是余额更新失败等）

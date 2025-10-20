@@ -32,6 +32,7 @@ model User {
   receivedReviews Review[] @relation("Reviewee")
   withdrawals   Withdrawal[]
   auditLogs     AuditLog[]  // 审计日志
+  performedPayments Payment[] @relation("PerformedPayments")  // ✅ 新增: 操作的Payment记录
 }
 
 enum Role {
@@ -129,10 +130,18 @@ model Payment {
   id              String        @id @default(cuid())
 
   // 关联
-  orderId         String
-  order           Order         @relation(fields: [orderId], references: [id])
+  orderId         String?       // ✅ 改为可选：WITHDRAW类型的Payment不关联订单
+  order           Order?        @relation(fields: [orderId], references: [id])
   userId          String
   user            User          @relation(fields: [userId], references: [id])
+
+  // ✅ 新增: 关联提现申请
+  withdrawalId    String?       // 关联Withdrawal记录
+  withdrawal      Withdrawal?   @relation(fields: [withdrawalId], references: [id])
+
+  // ✅ 新增: 操作人追溯
+  performedBy     String?       // 操作人userId（管理员操作时填充）
+  performedByUser User?         @relation("PerformedPayments", fields: [performedBy], references: [id])
 
   // 支付信息
   amount          Decimal     @db.Decimal(10, 2)  // 支付金额
@@ -144,6 +153,9 @@ model Payment {
   // 备注
   note            String?
 
+  // ✅ 新增: 元数据（存储调账原因、退款详情等）
+  metadata        Json?
+
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -152,13 +164,16 @@ model Payment {
   @@index([userId, type])      // 用户查看自己的支付记录
   @@index([status, createdAt]) // 按状态筛选并按时间排序
   @@index([type])              // 按支付类型筛选
+  @@index([withdrawalId])      // ✅ 新增: 提现关联查询优化
+  @@index([performedBy])       // ✅ 新增: 管理员操作查询优化
 }
 
 enum PaymentType {
-  ESCROW    // 托管支付(买家付款到平台)
-  RELEASE   // 释放款项(平台付款给卖家)
-  REFUND    // 退款(平台退款给买家)
-  WITHDRAW  // 提现
+  ESCROW            // 托管支付(买家付款到平台)
+  RELEASE           // 释放款项(平台付款给卖家)
+  REFUND            // 退款(平台退款给买家)
+  WITHDRAW          // 提现
+  ADMIN_ADJUSTMENT  // ✅ 新增: 管理员调账
 }
 
 enum PaymentStatus {
@@ -270,6 +285,9 @@ model Withdrawal {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
+  // ✅ 新增: 关联Payment记录
+  payments        Payment[]         // 一对多：申请、拒绝恢复等
+
   // ✅ 性能优化: 添加数据库索引
   @@index([userId, status])    // 用户查看自己的提现记录
   @@index([status, createdAt]) // 管理员按状态筛选提现申请
@@ -314,4 +332,41 @@ model AuditLog {
   @@index([action, createdAt])
   @@index([target])
   @@index([createdAt])
+}
+
+// ✅ 邮箱验证码表
+model VerificationCode {
+  id          String    @id @default(cuid())
+
+  // 验证信息
+  email       String    // 接收验证码的邮箱
+  code        String    // 6位数字验证码
+  type        VerificationType  // 验证类型
+
+  // 关联用户（可选，某些场景如注册时还没有用户ID）
+  userId      String?
+
+  // 验证状态
+  verified    Boolean   @default(false)  // 是否已验证
+  attempts    Int       @default(0)      // 验证尝试次数
+
+  // 时间控制
+  expiresAt   DateTime  // 过期时间（默认10分钟）
+  verifiedAt  DateTime? // 验证成功时间
+  createdAt   DateTime  @default(now())
+
+  // 索引优化
+  @@index([email, type, verified, expiresAt])  // 查询未验证的有效验证码
+  @@index([userId, type])                       // 查询用户的验证码
+  @@index([createdAt])                          // 清理过期数据
+}
+
+// 验证类型枚举
+enum VerificationType {
+  WITHDRAWAL        // 提现验证
+  CHANGE_EMAIL      // 修改邮箱验证
+  LARGE_PAYMENT     // 大额支付验证
+  CHANGE_PASSWORD   // 修改密码验证
+  REGISTER          // 注册验证（可选）
+  LOGIN             // 登录验证（可选）
 }

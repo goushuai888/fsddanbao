@@ -6,6 +6,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/infrastructure/database/prisma'
 import { adminOnly } from '@/lib/infrastructure/middleware/auth'
 import { logAudit, AUDIT_ACTIONS } from '@/lib/infrastructure/audit/audit-logger'
+import { walletService } from '@/lib/domain/finance/WalletService'
+import { FinancialError } from '@/lib/domain/finance/types'
 import { ApiResponse } from '@/types'
 
 /**
@@ -100,7 +102,7 @@ export const PATCH = adminOnly(async (request, { params }, auth) => {
         message: '已批准提现申请'
       })
     } else if (action === 'reject') {
-      // 拒绝提现（需要恢复用户余额）
+      // 拒绝提现（使用WalletService恢复余额+同步Payment状态）
       if (!rejectReason) {
         return NextResponse.json<ApiResponse>({
           success: false,
@@ -108,9 +110,17 @@ export const PATCH = adminOnly(async (request, { params }, auth) => {
         }, { status: 400 })
       }
 
-      await prisma.$transaction([
+      try {
+        // 使用WalletService执行提现退款（创建REFUND Payment + 恢复余额 + 更新原Payment状态）
+        await walletService.refundWithdrawal({
+          withdrawalId: id,
+          reason: rejectReason,
+          adminUserId: auth.userId,
+          note: reviewNote
+        })
+
         // 更新提现申请状态
-        prisma.withdrawal.update({
+        await prisma.withdrawal.update({
           where: { id },
           data: {
             status: 'REJECTED',
@@ -119,32 +129,18 @@ export const PATCH = adminOnly(async (request, { params }, auth) => {
             rejectReason,
             reviewedAt: new Date()
           }
-        }),
-        // 恢复用户余额
-        prisma.user.update({
-          where: { id: withdrawal.userId },
-          data: {
-            balance: {
-              increment: withdrawal.amount
-            }
-          }
         })
-      ])
+      } catch (error) {
+        if (error instanceof FinancialError) {
+          return NextResponse.json<ApiResponse>({
+            success: false,
+            error: `拒绝提现失败: ${error.message}`
+          }, { status: 400 })
+        }
+        throw error
+      }
 
-      // 记录审计日志
-      await logAudit({
-        userId: auth.userId,
-        action: AUDIT_ACTIONS.REJECT_WITHDRAWAL,
-        target: id,
-        targetType: 'Withdrawal',
-        oldValue: { status: 'PENDING' },
-        newValue: {
-          status: 'REJECTED',
-          rejectReason
-        },
-        description: `拒绝提现申请: ${rejectReason}`,
-        req: request
-      })
+      // 注意: 审计日志已由walletService.refundWithdrawal()自动记录
 
       return NextResponse.json<ApiResponse>({
         success: true,
@@ -164,7 +160,7 @@ export const PATCH = adminOnly(async (request, { params }, auth) => {
         message: '提现申请已标记为处理中'
       })
     } else if (action === 'complete') {
-      // 完成提现
+      // 完成提现（同步更新Withdrawal和Payment状态）
       if (!transactionId) {
         return NextResponse.json<ApiResponse>({
           success: false,
@@ -172,13 +168,28 @@ export const PATCH = adminOnly(async (request, { params }, auth) => {
         }, { status: 400 })
       }
 
-      await prisma.withdrawal.update({
-        where: { id },
-        data: {
-          status: 'COMPLETED',
-          transactionId,
-          completedAt: new Date()
-        }
+      // 在事务中更新Withdrawal和关联的Payment状态
+      await prisma.$transaction(async (tx) => {
+        // 1. 更新Withdrawal状态
+        await tx.withdrawal.update({
+          where: { id },
+          data: {
+            status: 'COMPLETED',
+            transactionId,
+            completedAt: new Date()
+          }
+        })
+
+        // 2. 更新关联的WITHDRAW Payment状态为COMPLETED
+        await tx.payment.updateMany({
+          where: {
+            withdrawalId: id,
+            type: 'WITHDRAW'
+          },
+          data: {
+            status: 'COMPLETED'
+          }
+        })
       })
 
       // 记录审计日志
@@ -201,39 +212,35 @@ export const PATCH = adminOnly(async (request, { params }, auth) => {
         message: '提现已完成'
       })
     } else if (action === 'fail') {
-      // 标记为失败，恢复用户余额
-      await prisma.$transaction([
-        prisma.withdrawal.update({
+      // 标记为失败（使用WalletService恢复余额+同步Payment状态）
+      try {
+        // 使用WalletService执行提现退款（创建REFUND Payment + 恢复余额 + 更新原Payment状态）
+        await walletService.refundWithdrawal({
+          withdrawalId: id,
+          reason: '提现处理失败',
+          adminUserId: auth.userId,
+          note: reviewNote || '银行转账失败或其他技术问题'
+        })
+
+        // 更新提现申请状态
+        await prisma.withdrawal.update({
           where: { id },
           data: {
             status: 'FAILED',
             reviewNote
           }
-        }),
-        prisma.user.update({
-          where: { id: withdrawal.userId },
-          data: {
-            balance: {
-              increment: withdrawal.amount
-            }
-          }
         })
-      ])
+      } catch (error) {
+        if (error instanceof FinancialError) {
+          return NextResponse.json<ApiResponse>({
+            success: false,
+            error: `标记提现失败操作失败: ${error.message}`
+          }, { status: 400 })
+        }
+        throw error
+      }
 
-      // 记录审计日志
-      await logAudit({
-        userId: auth.userId,
-        action: AUDIT_ACTIONS.FAIL_WITHDRAWAL,
-        target: id,
-        targetType: 'Withdrawal',
-        oldValue: { status: withdrawal.status },
-        newValue: {
-          status: 'FAILED',
-          reviewNote
-        },
-        description: `提现失败，已恢复用户余额`,
-        req: request
-      })
+      // 注意: 审计日志已由walletService.refundWithdrawal()自动记录
 
       return NextResponse.json<ApiResponse>({
         success: true,

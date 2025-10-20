@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/infrastructure/database/prisma'
 import { verifyToken } from '@/lib/infrastructure/auth/jwt'
 import { logAudit, AUDIT_ACTIONS } from '@/lib/infrastructure/audit/audit-logger'
+import { walletService } from '@/lib/domain/finance/WalletService'
+import { FinancialError } from '@/lib/domain/finance/types'
 import { ApiResponse } from '@/types'
 
 // 处理退款申请
@@ -58,28 +60,56 @@ export async function PATCH(
     let updatedOrder
 
     if (action === 'approve') {
-      // 同意退款 - 退款给买家
-      updatedOrder = await prisma.order.update({
-        where: { id: params.id },
-        data: {
-          refundStatus: 'APPROVED',
-          status: 'CANCELLED',
-          cancelledAt: new Date()
-        }
-      })
+      // 同意退款 - 使用WalletService退款给买家(Payment+余额原子更新)
+      if (!order.buyerId) {
+        return NextResponse.json<ApiResponse>({
+          success: false,
+          error: '订单没有买家,无法退款'
+        }, { status: 400 })
+      }
 
-      // 创建退款记录
-      if (order.buyerId) {
-        await prisma.payment.create({
-          data: {
-            orderId: order.id,
-            userId: order.buyerId,
+      try {
+        // 在事务中执行退款和订单状态更新
+        await prisma.$transaction(async (tx) => {
+          // 1. 使用WalletService创建REFUND Payment并更新买家余额
+          await walletService.credit({
+            userId: order.buyerId!,
             amount: order.escrowAmount || order.price,
             type: 'REFUND',
-            status: 'COMPLETED',
-            note: note || '管理员批准退款申请'
-          }
+            orderId: order.id,
+            note: note || '管理员批准退款申请',
+            performedBy: payload.userId,
+            metadata: {
+              adminNote: note,
+              adminUserId: payload.userId,
+              refundReason: order.refundReason || '管理员批准'
+            }
+          }, tx)
+
+          // 2. 更新订单状态
+          await tx.order.update({
+            where: { id: params.id },
+            data: {
+              refundStatus: 'APPROVED',
+              status: 'CANCELLED',
+              cancelledAt: new Date(),
+              refundApprovedAt: new Date()
+            }
+          })
         })
+
+        // 查询更新后的订单
+        updatedOrder = await prisma.order.findUnique({
+          where: { id: params.id }
+        })
+      } catch (error) {
+        if (error instanceof FinancialError) {
+          return NextResponse.json<ApiResponse>({
+            success: false,
+            error: `退款失败: ${error.message}`
+          }, { status: 400 })
+        }
+        throw error
       }
 
       // 记录审计日志
@@ -94,9 +124,10 @@ export async function PATCH(
         },
         newValue: {
           refundStatus: 'APPROVED',
-          orderStatus: 'CANCELLED'
+          orderStatus: 'CANCELLED',
+          refundAmount: Number(order.escrowAmount || order.price)
         },
-        description: `批准退款申请`,
+        description: `批准退款申请: ${note || '无备注'}`,
         req: request
       })
     } else if (action === 'reject') {
