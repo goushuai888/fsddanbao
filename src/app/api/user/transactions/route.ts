@@ -16,6 +16,11 @@ import { ApiResponse } from '@/types'
  * - type: 账务类型筛选 (ESCROW/RELEASE/REFUND/WITHDRAW)
  * - limit: 每页数量 (默认20，最大100)
  * - offset: 分页偏移量 (默认0)
+ *
+ * 返回数据:
+ * - transactions: 账务记录列表
+ * - balance: 用户当前余额
+ * - pagination: 分页信息
  */
 export const GET = withAuth(async (request, context, auth) => {
   try {
@@ -44,8 +49,8 @@ export const GET = withAuth(async (request, context, auth) => {
       where.type = type
     }
 
-    // 查询账务记录
-    const [transactions, total] = await Promise.all([
+    // 查询账务记录和用户余额
+    const [transactions, total, user] = await Promise.all([
       prisma.payment.findMany({
         where,
         include: {
@@ -57,6 +62,27 @@ export const GET = withAuth(async (request, context, auth) => {
               vehicleModel: true,
               status: true
             }
+          },
+          // ✅ 新增: 提现关联（用于WITHDRAW/REFUND类型）
+          withdrawal: {
+            select: {
+              id: true,
+              withdrawMethod: true,
+              status: true,
+              amount: true,
+              actualAmount: true,
+              createdAt: true,
+              completedAt: true
+            }
+          },
+          // ✅ 新增: 操作人关联（用于管理员操作）
+          performedByUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true
+            }
           }
         },
         orderBy: {
@@ -65,14 +91,19 @@ export const GET = withAuth(async (request, context, auth) => {
         take: limit,
         skip: offset
       }),
-      prisma.payment.count({ where })
+      prisma.payment.count({ where }),
+      prisma.user.findUnique({
+        where: { id: auth.userId },
+        select: { balance: true }
+      })
     ])
 
-    // 返回结果
+    // 返回结果（包含用户余额）
     return NextResponse.json<ApiResponse>({
       success: true,
       data: {
         transactions,
+        balance: user?.balance || 0,  // ✅ 添加用户当前余额
         pagination: {
           total,
           limit,
