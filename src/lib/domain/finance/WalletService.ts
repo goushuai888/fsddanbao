@@ -264,8 +264,8 @@ export class WalletService {
         reason: params.reason,
         paymentId: result.payment.id
       },
-      description: `管理员调账: ${params.isCredit ? '增加' : '扣除'} ¥${params.amount} - ${params.reason}`,
-      req: null // 这里没有request对象，传null
+      description: `管理员调账: ${params.isCredit ? '增加' : '扣除'} ¥${params.amount} - ${params.reason}`
+      // req字段省略，logAudit会使用undefined
     })
 
     console.log(
@@ -366,7 +366,7 @@ export class WalletService {
         paymentId: result.payment.id
       },
       description: `提现退款: ${params.reason}`,
-      req: null
+      // req字段省略，logAudit会使用undefined
     })
 
     console.log(

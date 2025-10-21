@@ -119,7 +119,7 @@ export default function AdminOrdersPage() {
         title="筛选订单"
         fields={filterFields}
         values={filters}
-        onChange={setFilters}
+        onChange={(values) => setFilters(values as typeof filters)}
         className="mb-6"
       />
 

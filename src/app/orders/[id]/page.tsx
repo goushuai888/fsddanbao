@@ -61,6 +61,8 @@ export default function OrderDetailPage() {
   const [transferNote, setTransferNote] = useState('')
   const [transferProofError, setTransferProofError] = useState<string | null>(null)
 
+  // ✅ 移除大额支付验证状态（按用户要求）
+
   // 对话框状态
   const [showRefundDialog, setShowRefundDialog] = useState(false)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
@@ -268,10 +270,10 @@ export default function OrderDetailPage() {
                           <div className="font-medium">{formatPrice(order.escrowAmount)}</div>
                         </>
                       )}
-                      {order.sellerAmount && (
+                      {order.platformFee !== null && order.platformFee !== undefined && (
                         <>
                           <div className="text-gray-600">卖家实收：</div>
-                          <div className="font-medium text-green-600">{formatPrice(order.sellerAmount)}</div>
+                          <div className="font-medium text-green-600">{formatPrice(order.price - order.platformFee)}</div>
                         </>
                       )}
                     </div>
@@ -498,10 +500,13 @@ export default function OrderDetailPage() {
         <CardContent className="space-y-4">
           {/* PUBLISHED状态 - 买家购买 */}
           {order.status === 'PUBLISHED' && !isSeller && (
-            <div>
-              <p className="text-sm text-gray-600 mb-3">
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
                 点击下方按钮下单并支付到平台托管账户
               </p>
+
+              {/* ✅ 移除大额订单验证（按用户要求） */}
+
               <Button
                 onClick={() => executeAction('pay')}
                 disabled={actionLoading}

@@ -125,7 +125,7 @@ export default function AdminPaymentsPage() {
         title="筛选支付记录"
         fields={filterFields}
         values={filters}
-        onChange={setFilters}
+        onChange={(values) => setFilters(values as typeof filters)}
         className="mb-6"
       />
 

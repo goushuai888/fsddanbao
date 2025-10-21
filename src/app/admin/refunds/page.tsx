@@ -1,41 +1,16 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { formatDate, formatPrice } from '@/lib/utils/helpers/common'
 import { sanitizeText } from '@/lib/infrastructure/security/sanitize'
-import { handleApiError } from '@/lib/utils/helpers/error-handler'
 import { toast } from 'sonner'
 import { RefundActionSchema } from '@/lib/validations/admin'
 import { AdminFilters, FilterField } from '@/components/admin/AdminFilters'
 import { useApiData } from '@/hooks/useApiData'
-
-interface RefundRequest {
-  id: string
-  orderNo: string
-  status: string
-  price: number
-  escrowAmount: number | null
-  vehicleBrand: string
-  vehicleModel: string
-  refundReason: string | null
-  refundRequestedAt: string | null
-  refundStatus: string | null
-  seller: {
-    id: string
-    name: string | null
-    email: string
-    phone: string | null
-  }
-  buyer: {
-    id: string
-    name: string | null
-    email: string
-    phone: string | null
-  } | null
-}
+import { refundService, type RefundRequest } from '@/lib/services/admin'  // ✅ 导入service
 
 const REFUND_STATUS_MAP: Record<string, { label: string; color: string }> = {
   PENDING: { label: '待处理', color: 'bg-orange-100 text-orange-800' },
@@ -45,7 +20,7 @@ const REFUND_STATUS_MAP: Record<string, { label: string; color: string }> = {
 
 export default function AdminRefundsPage() {
   // 筛选状态
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<Record<string, any>>({
     status: 'all'
   })
 
@@ -81,39 +56,27 @@ export default function AdminRefundsPage() {
 
     try {
       setActionLoading(true)
-      const token = localStorage.getItem('token')
 
-      const response = await fetch(`/api/admin/refunds/${selectedRefund.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(validation.data)
+      // ✅ 使用Service层: 解耦API调用，提升可测试性
+      if (actionType === 'approve') {
+        await refundService.approveRefund(selectedRefund.id, note)
+      } else {
+        await refundService.rejectRefund(selectedRefund.id, note)
+      }
+
+      // 成功提示
+      toast.success('处理成功', {
+        description: `已${actionType === 'approve' ? '同意' : '拒绝'}退款申请`
       })
 
-      // ✅ 统一错误处理: 检查HTTP状态码
-      if (!response.ok) {
-        handleApiError(response, '处理退款申请')
-        return
-      }
-
-      const data = await response.json()
-
-      if (data.success) {
-        toast.success('处理成功', {
-          description: data.message || `已${actionType === 'approve' ? '同意' : '拒绝'}退款申请`
-        })
-        setShowDialog(false)
-        setSelectedRefund(null)
-        setNote('')
-        refetch()  // ✅ 使用 refetch 刷新数据
-      } else {
-        handleApiError(data, '处理退款申请')
-      }
+      // 重置状态并刷新数据
+      setShowDialog(false)
+      setSelectedRefund(null)
+      setNote('')
+      refetch()
     } catch (error) {
+      // Service层已处理错误并显示toast
       console.error('处理退款申请错误:', error)
-      handleApiError(error, '处理退款申请')
     } finally {
       setActionLoading(false)
     }
@@ -155,7 +118,7 @@ export default function AdminRefundsPage() {
         title="筛选退款申请"
         fields={filterFields}
         values={filters}
-        onChange={setFilters}
+        onChange={(values) => setFilters(values as typeof filters)}
         className="mb-6"
       />
 

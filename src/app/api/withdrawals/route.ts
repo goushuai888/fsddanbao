@@ -120,8 +120,8 @@ export const POST = withAuth(async (request, context, auth) => {
       }, { status: 400 })
     }
 
-    // 计算手续费（假设手续费为提现金额的1%）
-    const fee = amount * 0.01
+    // ✅ 修复手续费计算（2%，与新API一致）
+    const fee = amount * 0.02
     const actualAmount = amount - fee
 
     // 使用事务：创建提现申请并立即扣除余额
@@ -150,6 +150,18 @@ export const POST = withAuth(async (request, context, auth) => {
           balance: {
             decrement: amount
           }
+        }
+      })
+
+      // ✅ 修复：创建账务记录（WITHDRAW类型）
+      await tx.payment.create({
+        data: {
+          userId: auth.userId,
+          amount,
+          type: 'WITHDRAW',
+          status: 'PENDING',
+          withdrawalId: newWithdrawal.id,  // ✅ 关联Withdrawal记录
+          note: `提现申请 - ${withdrawMethod === 'bank' ? '银行卡' : withdrawMethod === 'alipay' ? '支付宝' : '微信'}`
         }
       })
 

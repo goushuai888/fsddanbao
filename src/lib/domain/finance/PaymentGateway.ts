@@ -40,7 +40,7 @@ export class PaymentGateway {
         paymentMethod: data.paymentMethod,
         transactionId: data.transactionId,
         note: data.note,
-        metadata: data.metadata || null
+        metadata: data.metadata || undefined
       }
     })
   }

@@ -12,7 +12,7 @@
  * - 支持自动/手动刷新
  */
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { toast } from 'sonner'
 
 export interface UseApiDataOptions<T> {
@@ -72,6 +72,10 @@ export function useApiData<T = any>(
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // ✅ 性能优化: 稳定化params引用，防止不必要的重新获取
+  // 只有当params的实际内容变化时才会触发重新获取
+  const paramsKey = useMemo(() => JSON.stringify(params), [params])
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true)
@@ -130,7 +134,7 @@ export function useApiData<T = any>(
     } finally {
       setLoading(false)
     }
-  }, [url, params, transform, onSuccess, onError, showErrorToast])
+  }, [url, paramsKey, transform, onSuccess, onError, showErrorToast])  // ✅ 使用paramsKey代替params
 
   useEffect(() => {
     if (autoFetch) {

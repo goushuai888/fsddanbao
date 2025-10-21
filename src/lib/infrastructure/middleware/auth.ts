@@ -144,7 +144,7 @@ export function withAuth<TContext = unknown>(
 
       // 如果是可选认证且没有token，传递null作为auth
       if (options.optional && !token) {
-        return await handler(request, context, null as any)
+        return (await handler(request, context, null as any)) as NextResponse
       }
 
       if (!token) {
@@ -195,7 +195,7 @@ export function withAuth<TContext = unknown>(
       // ========================================
       // 5. 执行业务处理器
       // ========================================
-      return await handler(request, context, authContext)
+      return (await handler(request, context, authContext)) as NextResponse
 
     } catch (error) {
       // ========================================
@@ -250,8 +250,7 @@ function handleAuthError(error: unknown): NextResponse {
     return NextResponse.json<ApiResponse>(
       {
         success: false,
-        error: error.message,
-        code: error.code
+        error: error.message
       },
       { status: error.statusCode }
     )

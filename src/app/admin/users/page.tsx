@@ -90,7 +90,7 @@ export default function AdminUsersPage() {
         title="筛选用户"
         fields={filterFields}
         values={filters}
-        onChange={setFilters}
+        onChange={(values) => setFilters(values as typeof filters)}
         className="mb-6"
       />
 

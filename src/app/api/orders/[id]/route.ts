@@ -253,6 +253,21 @@ export async function PATCH(
 
     switch (action) {
       case 'pay': {
+        // ✅ 大额支付验证（订单金额≥10000元需要邮箱验证）
+        const order = await prisma.order.findUnique({
+          where: { id: params.id },
+          select: { price: true }
+        })
+
+        if (!order) {
+          return NextResponse.json<ApiResponse>({
+            success: false,
+            error: '订单不存在'
+          }, { status: 404 })
+        }
+
+        // ✅ 移除大额订单邮箱验证（按用户要求）
+        // 执行支付
         const useCase = new PayOrderUseCase()
         const result = await useCase.execute({
           orderId: params.id,

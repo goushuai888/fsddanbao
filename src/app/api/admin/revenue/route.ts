@@ -29,14 +29,14 @@ export const GET = adminOnly(async (request, context, auth) => {
     }
 
     if (startDate || endDate) {
-      dateFilter.completedAt = {}
+      dateFilter.completedAt = {} as Record<string, Date>
       if (startDate) {
-        dateFilter.completedAt.gte = new Date(startDate)
+        (dateFilter.completedAt as Record<string, Date>).gte = new Date(startDate)
       }
       if (endDate) {
         const endDateTime = new Date(endDate)
-        endDateTime.setHours(23, 59, 59, 999)
-        dateFilter.completedAt.lte = endDateTime
+        endDateTime.setHours(23, 59, 59, 999);
+        (dateFilter.completedAt as Record<string, Date>).lte = endDateTime
       }
     }
 

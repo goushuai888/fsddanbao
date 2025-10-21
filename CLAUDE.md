@@ -393,11 +393,6 @@ QINIU_DOMAIN="https://fsddanbao.s3.ap-southeast-1.qiniucs.com"
 完成时间：2025-10-20 15:00
 ```
 
-**相关文档**：
-- `openspec/changes/enhance-transaction-audit-trail/proposal.md` - 详细需求分析
-- `openspec/changes/enhance-transaction-audit-trail/specs/transaction-api/spec.md` - 技术规范
-- `openspec/changes/enhance-transaction-audit-trail/tasks.md` - 实施清单
-
 ---
 
 ### 💰 财务架构重构完成 ✅
@@ -1082,8 +1077,6 @@ src/components/layout/Navbar.tsx  # 添加账务记录链接
 
 ### 管理员页面安全加固完成 ✅
 **完成时间**：2025-10-18
-
-**OpenSpec变更**：`harden-admin-page-security`
 
 **实施内容**：
 1. ✅ **服务端认证保护**（CVSS 9.1 严重漏洞修复）

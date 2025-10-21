@@ -199,7 +199,7 @@ export default function AdminWithdrawalsPage() {
         title="筛选提现申请"
         fields={filterFields}
         values={filters}
-        onChange={setFilters}
+        onChange={(values) => setFilters(values as typeof filters)}
         className="mb-6"
       />
 

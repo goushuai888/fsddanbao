@@ -64,6 +64,7 @@ export function createSafeMarkup(html: string): { __html: string } {
  * @param url 用户输入的URL
  * @returns 安全的URL或空字符串
  */
+/* eslint-disable no-script-url */
 export function sanitizeUrl(url: string): string {
   if (!url) return ''
 
@@ -91,13 +92,14 @@ export function sanitizeUrl(url: string): string {
     trimmedUrl.startsWith('mailto:') ||
     trimmedUrl.startsWith('/') ||
     trimmedUrl.startsWith('#')
-  ) {
+  )  {
     return url.trim()
   }
 
   // 相对路径默认添加https协议
   return `https://${url.trim()}`
 }
+/* eslint-enable no-script-url */
 
 /**
  * 批量清理对象中的所有字符串字段
