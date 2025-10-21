@@ -1,9 +1,13 @@
-# 多阶段构建 - 基础镜像
-FROM node:20-alpine AS base
+# 多阶段构建 - 使用 Debian Slim 以获得更好的兼容性
+FROM node:20-slim AS base
 
 # 安装依赖阶段
 FROM base AS deps
-RUN apk add --no-cache libc6-compat openssl
+RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # 复制 package 文件
@@ -21,8 +25,13 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # 设置环境变量
-ENV NEXT_TELEMETRY_DISABLED 1
-ENV NODE_ENV production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+# 构建时需要虚拟环境变量（实际运行时会被覆盖）
+ENV DATABASE_URL="postgresql://user:password@localhost:5432/db?schema=public"
+ENV JWT_SECRET="build-time-secret-will-be-replaced-at-runtime-12345678901234567890123456789012"
+ENV NEXTAUTH_SECRET="build-time-secret-will-be-replaced-at-runtime"
+ENV PLATFORM_FEE_RATE="0.03"
 
 # 生成 Prisma Client
 RUN npm install -g pnpm && \
@@ -38,12 +47,15 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# 安装 OpenSSL 和 Prisma 运行时依赖
-RUN apk add --no-cache openssl openssl-dev
+# 安装运行时依赖
+RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # 创建非 root 用户
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 nextjs
 
 # 安装 pnpm (用于 prisma generate)
 RUN npm install -g pnpm
